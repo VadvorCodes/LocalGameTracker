@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+src-tauri/target/
+
+# Distribution packages (ship via GitHub Releases, not git)
+v1/
+v1.zip
+
+# ZCode workspace metadata
+.zcode/
+
+# Logs
+*.log
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local env
+.env
