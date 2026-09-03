@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
-import { Link } from "react-router-dom";
 import { api } from "../api";
 import type { LibraryEntry, PlayStatus, RerateDecision, ReratePoolItem } from "../types";
 import { useSequentialFetch } from "../hooks/useSequentialFetch";
-import SwipeCard from "../components/rerate/SwipeCard";
-import MatchCard from "../components/rerate/MatchCard";
-import RerateRatingPanel from "../components/rerate/RerateRatingPanel";
-import SwipeBackdrop from "../components/rerate/SwipeBackdrop";
-import DecisionButton from "../components/rerate/DecisionButton";
-import PileList from "../components/rerate/PileList";
+import IdleScreen from "../components/rerate/IdleScreen";
+import LoadingScreen from "../components/rerate/LoadingScreen";
+import SwipeScreen from "../components/rerate/SwipeScreen";
+import ReviewScreen from "../components/rerate/ReviewScreen";
+import RerateScreen from "../components/rerate/RerateScreen";
+import DoneScreen from "../components/rerate/DoneScreen";
 
 type Phase = "idle" | "loading" | "swipe" | "review" | "rerate" | "done";
-type Scope = "played" | "finished";
+export type Scope = "played" | "finished";
 
 const SCOPE_KEY = "rerate_scope";
 
@@ -20,18 +19,13 @@ const SCOPE_STATUSES: Record<Scope, PlayStatus[]> = {
   finished: ["Completed", "Dropped"],
 };
 
-const SCOPE_LABELS: Record<Scope, string> = {
-  played: "All played games",
-  finished: "Completed & dropped only",
-};
-
 const EMPTY_POOL_MESSAGE = "No games are in scope right now — add some games to this scope first.";
 
 /**
  * Everything one cycle tracks. `scope` and `scopeRows` stay outside: they are
  * idle-screen concerns that no cycle transition touches.
  */
-interface CycleState {
+export interface CycleState {
   phase: Phase;
   pool: ReratePoolItem[];
   // Pile order as entry ids: piles render in this sequence and the re-rate
@@ -79,7 +73,7 @@ const initialState: CycleState = {
 };
 
 /** The cycle's transitions, named after the user actions that trigger them. */
-type CycleAction =
+export type CycleAction =
   | { type: "startSession" }
   | { type: "poolLoaded"; pool: ReratePoolItem[] }
   | { type: "sessionFailed"; message: string }
@@ -309,296 +303,32 @@ export default function RerateMode() {
     [pool, order, decisions],
   );
 
-  if (cycle.phase === "loading") {
-    return (
-      <div className="h-full flex items-center justify-center text-slate-500">
-        Shuffling your library…
-      </div>
-    );
-  }
+  if (cycle.phase === "loading") return <LoadingScreen />;
 
-  if (cycle.phase === "swipe") {
-    const item = pool[cycle.swipeIdx];
-    const decidedCount = Object.keys(decisions).length;
-    return (
-      <div className="h-full flex flex-col relative overflow-hidden">
-        <SwipeBackdrop dragX={cycle.dragX} />
-        <div className="relative p-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold text-white">Re-Rate Mode</h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Game {cycle.swipeIdx + 1} of {pool.length} · {decidedCount} categorised
-            </p>
-          </div>
-          <button
-            className="btn-ghost !py-1.5 text-xs"
-            onClick={() => dispatch({ type: "cancel" })}
-          >
-            Cancel cycle
-          </button>
-        </div>
-        <div className="relative px-6 flex gap-1">
-          {pool.map((i) => {
-            const d = decisions[i.entry.id];
-            const prev = cycle.previousDecisions[i.entry.id];
-            return (
-              <div key={i.entry.id} className="flex-1 flex flex-col items-center gap-1.5">
-                <div
-                  className={`h-1.5 w-full rounded-full transition-colors ${
-                    d === "rerate"
-                      ? "bg-rose-500"
-                      : d === "keep"
-                        ? "bg-emerald-500"
-                        : "bg-surface-700"
-                  }`}
-                />
-                <div
-                  className={`h-2.5 w-2.5 rounded-sm transition-colors ${
-                    cycle.revisiting && prev
-                      ? prev === "rerate"
-                        ? "bg-rose-500"
-                        : "bg-emerald-500"
-                      : "bg-transparent"
-                  }`}
-                />
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="relative flex-1 flex flex-col items-center justify-center gap-5 px-6 min-h-0 overflow-y-auto">
-          <SwipeCard
-            key={item.entry.id}
-            item={item}
-            exitRequest={cycle.exitRequest}
-            onDecided={(d) => dispatch({ type: "cardDecided", decision: d })}
-            onDragX={(x) => dispatch({ type: "dragXChanged", x })}
-          />
-
-          <p className="text-xs text-slate-500 text-center">
-            Drag the card left to re-rate it, right to keep its rating — or use the buttons / arrow
-            keys.
-          </p>
-
-          <div
-            className="flex gap-8 items-start transition-opacity duration-150"
-            style={{ opacity: cycle.dragX !== 0 ? 0 : 1 }}
-          >
-            <DecisionButton
-              kind="rerate"
-              label="✕ Re-rate"
-              previous={cycle.previousDecisions[item.entry.id]}
-              showIndicator={cycle.revisiting}
-              onClick={() => requestDecision("rerate")}
-            />
-            <DecisionButton
-              kind="keep"
-              label="✓ Keep rating"
-              previous={cycle.previousDecisions[item.entry.id]}
-              showIndicator={cycle.revisiting}
-              onClick={() => requestDecision("keep")}
-            />
-          </div>
-
-          <div
-            className="transition-opacity duration-150"
-            style={{ opacity: cycle.dragX !== 0 ? 0 : 1 }}
-          >
-            {item.similar.length > 0 && (
-              <div className="max-w-3xl">
-                <h3 className="text-[11px] uppercase tracking-wide text-slate-500 mb-2 text-center">
-                  Closest genre matches in your library
-                </h3>
-                <div className="flex gap-3 justify-center">
-                  {item.similar.map((s) => (
-                    <MatchCard key={s.id} entry={s} />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (cycle.phase === "swipe") return <SwipeScreen cycle={cycle} dispatch={dispatch} />;
 
   if (cycle.phase === "review") {
     return (
-      <div className="p-8 max-w-4xl mx-auto space-y-8">
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-white">Cycle review</h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Click a game to move it between piles, or drag it — dragging within a pile reorders
-              it, which is the order the re-rating follows.
-            </p>
-          </div>
-          <button className="btn-ghost" onClick={() => dispatch({ type: "backToSwiping" })}>
-            ← Back to swiping
-          </button>
-        </header>
-
-        <PileList
-          title={`Re-rate — ${rerateItems.length}`}
-          tone="rose"
-          items={rerateItems}
-          draggedId={cycle.dragId}
-          dropIndex={cycle.dropTarget?.pile === "rerate" ? cycle.dropTarget.index : null}
-          dropEdge={cycle.dropTarget?.pile === "rerate" ? cycle.dropTarget.edge : null}
-          onToggle={(id) => dispatch({ type: "togglePile", entryId: id, pile: "keep" })}
-          onDragOver={(index, edge) =>
-            dispatch({ type: "dropTargetChanged", pile: "rerate", index, edge })
-          }
-          onDropItem={(id, index) =>
-            dispatch({ type: "reorder", entryId: id, pile: "rerate", index })
-          }
-          onDragStart={(id) => dispatch({ type: "dragStarted", entryId: id })}
-          onDragEnd={() => dispatch({ type: "dragEnded" })}
-        />
-        <PileList
-          title={`Keep rating — ${keepItems.length}`}
-          tone="emerald"
-          items={keepItems}
-          draggedId={cycle.dragId}
-          dropIndex={cycle.dropTarget?.pile === "keep" ? cycle.dropTarget.index : null}
-          dropEdge={cycle.dropTarget?.pile === "keep" ? cycle.dropTarget.edge : null}
-          onToggle={(id) => dispatch({ type: "togglePile", entryId: id, pile: "rerate" })}
-          onDragOver={(index, edge) =>
-            dispatch({ type: "dropTargetChanged", pile: "keep", index, edge })
-          }
-          onDropItem={(id, index) =>
-            dispatch({ type: "reorder", entryId: id, pile: "keep", index })
-          }
-          onDragStart={(id) => dispatch({ type: "dragStarted", entryId: id })}
-          onDragEnd={() => dispatch({ type: "dragEnded" })}
-        />
-
-        <div className="flex justify-end">
-          <button className="btn-primary" onClick={() => dispatch({ type: "confirmReview" })}>
-            {rerateItems.length > 0 ? "Confirm & start re-rating" : "Confirm & finish"}
-          </button>
-        </div>
-      </div>
+      <ReviewScreen
+        cycle={cycle}
+        rerateItems={rerateItems}
+        keepItems={keepItems}
+        dispatch={dispatch}
+      />
     );
   }
 
-  if (cycle.phase === "rerate") {
-    const item = cycle.rerateQueue[cycle.rerateIdx];
-    return (
-      <div className="p-4 sm:p-8 max-w-4xl mx-auto h-full flex flex-col">
-        <header className="mb-6">
-          <h1 className="text-xl font-semibold text-white">Re-rating</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Game {cycle.rerateIdx + 1} of {cycle.rerateQueue.length} — update the scores that no
-            longer feel right. Skipped games keep their rating and stay eligible for future cycles.
-          </p>
-        </header>
-        <div className="flex-1 flex items-start justify-center">
-          <RerateRatingPanel
-            key={item.entry.id}
-            entry={item.entry}
-            onSaved={() => dispatch({ type: "gameFinished", saved: true })}
-            onSkipped={() => dispatch({ type: "gameFinished", saved: false })}
-          />
-        </div>
-      </div>
-    );
-  }
+  if (cycle.phase === "rerate") return <RerateScreen cycle={cycle} dispatch={dispatch} />;
 
-  if (cycle.phase === "done") {
-    const kept = pool.length - cycle.summary.rerated - cycle.summary.skipped;
-    return (
-      <div className="p-8 max-w-xl mx-auto h-full flex flex-col items-center justify-center text-center space-y-6">
-        <div className="text-5xl">🎉</div>
-        <div>
-          <h1 className="text-xl font-semibold text-white">Cycle complete</h1>
-          <p className="text-sm text-slate-500 mt-2">
-            {cycle.summary.rerated} re-rated · {cycle.summary.skipped} skipped · {kept} kept their
-            rating. Re-rated games sit out the next cycle, then become eligible again.
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <Link to="/library" className="btn-primary">
-            Back to Library
-          </Link>
-          <button className="btn-ghost" onClick={() => dispatch({ type: "cancel" })}>
-            Start another cycle
-          </button>
-        </div>
-      </div>
-    );
-  }
+  if (cycle.phase === "done") return <DoneScreen cycle={cycle} dispatch={dispatch} />;
 
-  // phase === "idle"
-  const inScope = scopeRows?.length ?? 0;
-  const cooling = scopeRows?.filter((r) => r.reratedAt).length ?? 0;
-  const eligible = inScope - cooling;
-  // The backend builds the pool from eligible games; a fully-cooled scope
-  // revives from the whole scope instead, so mirror that in the preview.
-  const poolBasis = eligible >= 2 ? eligible : inScope;
-  const cycleSize = Math.min(10, Math.max(1, Math.floor(poolBasis / 2)));
   return (
-    <div className="p-8 max-w-2xl mx-auto h-full flex flex-col">
-      <h1 className="text-xl font-semibold text-white">Re-Rate Mode</h1>
-      <p className="text-sm text-slate-500 mt-2 leading-relaxed">
-        Revisit old ratings with fresh eyes. A cycle shows you {cycleSize} of your games one at a
-        time — swipe left on the ones whose rating no longer feels right, right on the ones you
-        stand by. Afterwards you re-rate the left pile individually. Games you re-rate sit out the
-        next cycle.
-      </p>
-
-      <div className="card p-5 mt-6 space-y-4">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-200 mb-2">Which games are eligible?</h2>
-          <div className="flex rounded-lg border border-surface-600 overflow-hidden w-fit">
-            {(["played", "finished"] as Scope[]).map((s) => (
-              <button
-                key={s}
-                className={`px-4 py-2 text-sm transition-colors ${
-                  scope === s
-                    ? "bg-accent-600 text-white"
-                    : "bg-surface-800 text-slate-400 hover:text-slate-200"
-                }`}
-                onClick={() => changeScope(s)}
-              >
-                {SCOPE_LABELS[s]}
-              </button>
-            ))}
-          </div>
-        </div>
-        <p className="text-xs text-slate-500">
-          {scopeRows != null
-            ? `${eligible} game${eligible === 1 ? "" : "s"} ready to re-rate${
-                cooling > 0 ? ` · ${cooling} cooling down from your last cycle` : ""
-              }${
-                poolBasis >= 10
-                  ? " — cycles of 10"
-                  : poolBasis >= 2
-                    ? ` — cycles of ${cycleSize}`
-                    : ""
-              }.`
-            : "Counting eligible games…"}
-        </p>
-        <button
-          className="btn bg-surface-800 hover:bg-accent-600 text-slate-300 hover:text-white"
-          disabled={inScope < 2}
-          onClick={startCycle}
-        >
-          Start cycle
-        </button>
-        {inScope < 2 && (
-          <p className="text-xs text-amber-400">
-            You need at least 2 games in scope to start a cycle.
-          </p>
-        )}
-        {inScope >= 2 && eligible < 2 && (
-          <p className="text-xs text-amber-400">
-            Everything in scope is cooling down — starting now resets the cooldown and puts all{" "}
-            {inScope} games back in the pool.
-          </p>
-        )}
-        {cycle.error && <p className="text-xs text-rose-400">{cycle.error}</p>}
-      </div>
-    </div>
+    <IdleScreen
+      scope={scope}
+      scopeRows={scopeRows}
+      error={cycle.error}
+      onChangeScope={changeScope}
+      onStartCycle={startCycle}
+    />
   );
 }
