@@ -10,21 +10,9 @@ import {
   setDivider,
   textScore,
 } from "./searchRank";
+import { makeCachedGame } from "../test/utils";
 
 const NOW = new Date("2026-01-01T00:00:00Z");
-
-function game(partial: Partial<CachedGame>): CachedGame {
-  return {
-    rawgId: 0,
-    name: "",
-    coverUrl: null,
-    genres: [],
-    platforms: [],
-    releaseDate: null,
-    developer: null,
-    ...partial,
-  };
-}
 
 describe("textScore", () => {
   it("scores exact, prefix, word-boundary, substring and token matches in order", () => {
@@ -135,10 +123,20 @@ describe("rankGames", () => {
   // CoD Mobile, then Vanguard. Balanced weights should put the modern,
   // heavily-added entries on top while keeping the exact-match original visible.
   const callOfDutyGames: CachedGame[] = [
-    game({ rawgId: 1, name: "Call of Duty", releaseDate: "2003-10-29", added: 1500 }),
-    game({ rawgId: 2, name: "Call of Duty: Mobile", releaseDate: "2019-10-01", added: 900 }),
-    game({ rawgId: 3, name: "Call of Duty: Vanguard", releaseDate: "2021-11-05", added: 2000 }),
-    game({
+    makeCachedGame({ rawgId: 1, name: "Call of Duty", releaseDate: "2003-10-29", added: 1500 }),
+    makeCachedGame({
+      rawgId: 2,
+      name: "Call of Duty: Mobile",
+      releaseDate: "2019-10-01",
+      added: 900,
+    }),
+    makeCachedGame({
+      rawgId: 3,
+      name: "Call of Duty: Vanguard",
+      releaseDate: "2021-11-05",
+      added: 2000,
+    }),
+    makeCachedGame({
       rawgId: 4,
       name: "Call of Duty: Modern Warfare II",
       releaseDate: "2022-10-28",
@@ -197,8 +195,8 @@ describe("rankGames", () => {
 
   it("breaks score ties alphabetically and does not mutate the input", () => {
     const input = [
-      game({ rawgId: 1, name: "Beta", added: 100, releaseDate: "2020-01-01" }),
-      game({ rawgId: 2, name: "Alpha", added: 100, releaseDate: "2020-01-01" }),
+      makeCachedGame({ rawgId: 1, name: "Beta", added: 100, releaseDate: "2020-01-01" }),
+      makeCachedGame({ rawgId: 2, name: "Alpha", added: 100, releaseDate: "2020-01-01" }),
     ];
     const original = [...input];
     const order = rankGames(input, "", RANK_PRESETS.balanced, NOW);
@@ -208,8 +206,8 @@ describe("rankGames", () => {
 
   it("ranks games with no popularity data by text + recency only (offline cache)", () => {
     const undated = [
-      game({ rawgId: 1, name: "Portal", releaseDate: "2007-10-09" }),
-      game({ rawgId: 2, name: "Portal 2", releaseDate: "2011-04-18" }),
+      makeCachedGame({ rawgId: 1, name: "Portal", releaseDate: "2007-10-09" }),
+      makeCachedGame({ rawgId: 2, name: "Portal 2", releaseDate: "2011-04-18" }),
     ];
     const newest = rankGames(undated, "portal", RANK_PRESETS.newest, NOW).map((g) => g.name);
     expect(newest[0]).toBe("Portal 2"); // no `added` on either, recency decides

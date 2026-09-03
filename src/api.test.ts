@@ -23,7 +23,6 @@ const game = {
 
 beforeEach(() => {
   invokeMock.mockReset();
-  convertMock.mockClear();
 });
 
 describe("api wrappers", () => {

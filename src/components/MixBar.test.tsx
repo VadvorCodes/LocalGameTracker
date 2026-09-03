@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import MixBar from "./MixBar";
 import { RANK_PRESETS } from "../lib/searchRank";
@@ -25,10 +25,6 @@ function rect(left: number, width: number): DOMRect {
 function renderBar(weights = RANK_PRESETS.balanced) {
   return render(<MixBar weights={weights} onChange={onChange} />);
 }
-
-beforeEach(() => {
-  onChange.mockClear();
-});
 
 describe("MixBar", () => {
   it("renders the three segments and the legend readouts", () => {

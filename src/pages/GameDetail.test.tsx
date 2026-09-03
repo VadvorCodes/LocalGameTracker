@@ -10,7 +10,7 @@ vi.mock("../api", async () => {
 import { apiMock, localCoverMock } from "../test/apiMock";
 import { useApp } from "../store";
 import GameDetail from "./GameDetail";
-import { makeEntry, makeProfile } from "../test/utils";
+import { deferred, makeEntry, makeProfile } from "../test/utils";
 import type { LibraryEntry } from "../types";
 
 function NavProbe({ to }: { to: string }) {
@@ -53,21 +53,17 @@ const baseEntry = () =>
     gameplay: 70,
   });
 
-function deferredEntry() {
-  const d = { resolve: undefined as unknown as (e: LibraryEntry) => void };
-  const promise = new Promise<LibraryEntry>((res) => {
-    d.resolve = res;
-  });
-  return { ...d, promise };
-}
-
 beforeEach(() => {
-  vi.resetAllMocks();
-  localCoverMock.mockResolvedValue(null);
-  apiMock.getLibraryEntry.mockResolvedValue(baseEntry());
-  apiMock.updateLibraryEntry.mockImplementation(async (_id: number, patch: Partial<LibraryEntry>) =>
-    Object.assign(baseEntry(), patch),
-  );
+  localCoverMock.mockReset().mockResolvedValue(null);
+  apiMock.getLibraryEntry.mockReset().mockResolvedValue(baseEntry());
+  apiMock.updateLibraryEntry
+    .mockReset()
+    .mockImplementation(async (_id: number, patch: Partial<LibraryEntry>) =>
+      Object.assign(baseEntry(), patch),
+    );
+  apiMock.removeLibraryEntry.mockReset();
+  apiMock.setStarRating.mockReset();
+  apiMock.setCategoryScores.mockReset();
   useApp.setState({ profile: makeProfile({ categoryWeights: WEIGHTS }), profileLoading: false });
 });
 
@@ -103,7 +99,7 @@ describe("GameDetail — loading", () => {
   });
 
   it("ignores a stale response when navigating between entries", async () => {
-    const slow = deferredEntry();
+    const slow = deferred<LibraryEntry>();
     apiMock.getLibraryEntry.mockReturnValueOnce(slow.promise);
     apiMock.getLibraryEntry.mockResolvedValueOnce(makeEntry({ id: 6, name: "Celeste" }));
 

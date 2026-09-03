@@ -8,35 +8,16 @@ vi.mock("../lib/themes", async (importOriginal) => {
 
 import { applyTheme, CUSTOM_THEME_ID } from "../lib/themes";
 import CustomThemeEditor from "./CustomThemeEditor";
+import { flushRaf, restoreTimersAndRaf, useQueuedRaf } from "../test/utils";
 
 const applyThemeMock = vi.mocked(applyTheme);
 
-// Deterministic rAF: queue callbacks and flush them explicitly, so the test
-// does not depend on how jsdom schedules frames under fake timers.
-let rafQueue: (FrameRequestCallback | null)[];
-function flushRaf() {
-  const pending = rafQueue;
-  rafQueue = [];
-  pending.forEach((cb) => cb?.(16));
-}
-
 beforeEach(() => {
-  vi.useFakeTimers();
   document.documentElement.style.cssText = "";
-  rafQueue = [];
-  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
-    rafQueue.push(cb);
-    return rafQueue.length - 1;
-  });
-  vi.stubGlobal("cancelAnimationFrame", (id: number) => {
-    rafQueue[id] = null;
-  });
+  useQueuedRaf();
 });
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.useRealTimers();
-});
+afterEach(restoreTimersAndRaf);
 
 describe("CustomThemeEditor", () => {
   it("shows the initial colours on both pickers", () => {

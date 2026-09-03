@@ -12,7 +12,7 @@ import Onboarding from "./Onboarding";
 import { makeProfile } from "../test/utils";
 
 beforeEach(() => {
-  vi.resetAllMocks();
+  apiMock.createProfile.mockReset();
   useApp.setState({ profile: null, profileLoading: false });
 });
 

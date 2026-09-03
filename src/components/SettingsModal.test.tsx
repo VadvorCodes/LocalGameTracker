@@ -9,8 +9,13 @@ vi.mock("../api", async () => {
 import { apiMock } from "../test/apiMock";
 import { useApp } from "../store";
 import SettingsModal from "./SettingsModal";
-import { makeProfile } from "../test/utils";
-import type { UiSettings } from "../types";
+import {
+  defaultSettings,
+  flushRaf,
+  makeProfile,
+  restoreTimersAndRaf,
+  useQueuedRaf,
+} from "../test/utils";
 
 const MIDNIGHT_ACCENT_500 = "91 124 250";
 const OCEAN_ACCENT_500 = "34 190 216";
@@ -20,7 +25,7 @@ function resetStore(overrides: Record<string, unknown> = {}) {
     profile: makeProfile(),
     profileLoading: false,
     hasApiKey: true,
-    settings: { theme: "midnight", customTheme: null, extendedSorting: false } satisfies UiSettings,
+    settings: defaultSettings(),
     ...overrides,
   });
 }
@@ -36,7 +41,14 @@ function openCustomisationTab() {
 }
 
 beforeEach(() => {
-  vi.resetAllMocks();
+  apiMock.setApiKey.mockReset();
+  apiMock.getApiKey.mockReset();
+  apiMock.setExtendedSorting.mockReset();
+  apiMock.updateWeights.mockReset();
+  apiMock.getProfile.mockReset();
+  apiMock.renameProfile.mockReset();
+  apiMock.setTheme.mockReset();
+  apiMock.setCustomTheme.mockReset();
   document.documentElement.style.cssText = "";
   resetStore();
 });
@@ -52,7 +64,7 @@ describe("SettingsModal shell", () => {
     expect(screen.getByText("Username")).toBeInTheDocument();
   });
 
-  it("closes via the Close button and a backdrop click, but not inner clicks", () => {
+  it("closes via the Close button", () => {
     const { onClose } = renderModal();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -315,7 +327,7 @@ describe("Customisation tab — themes", () => {
   });
 
   it("marks the active preset visually", () => {
-    resetStore({ settings: { theme: "forest", customTheme: null, extendedSorting: false } });
+    resetStore({ settings: defaultSettings({ theme: "forest" }) });
     renderModal();
     openCustomisationTab();
     expect(screen.getByRole("button", { name: /Forest/ })).toHaveClass("border-accent-500/60");
@@ -324,11 +336,10 @@ describe("Customisation tab — themes", () => {
 
   it("persists edits settled by the custom colour editor", async () => {
     resetStore({
-      settings: {
+      settings: defaultSettings({
         theme: "custom",
         customTheme: { base: "#0b0e14", accent: "#5b7cfa" },
-        extendedSorting: false,
-      },
+      }),
     });
     apiMock.setCustomTheme.mockResolvedValueOnce({
       theme: "custom",
@@ -337,23 +348,14 @@ describe("Customisation tab — themes", () => {
     });
 
     // The editor debounces 400ms and coalesces via rAF — control both.
-    let rafQueue: (FrameRequestCallback | null)[] = [];
-    vi.useFakeTimers();
-    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
-      rafQueue.push(cb);
-      return rafQueue.length - 1;
-    });
-    vi.stubGlobal("cancelAnimationFrame", (id: number) => {
-      rafQueue[id] = null;
-    });
+    useQueuedRaf();
     try {
       renderModal();
       openCustomisationTab();
       const colourInput = document.querySelector<HTMLInputElement>('input[type="color"]')!;
       expect(colourInput.value).toBe("#0b0e14");
       fireEvent.change(colourInput, { target: { value: "#102030" } });
-      rafQueue.forEach((cb) => cb?.(0));
-      rafQueue = [];
+      flushRaf();
       vi.advanceTimersByTime(400);
 
       await act(async () => {
@@ -366,37 +368,26 @@ describe("Customisation tab — themes", () => {
         accent: "#5b7cfa",
       });
     } finally {
-      vi.unstubAllGlobals();
-      vi.useRealTimers();
+      restoreTimersAndRaf();
     }
   });
 
   it("rolls the custom theme back when the settle persist fails", async () => {
     resetStore({
-      settings: {
+      settings: defaultSettings({
         theme: "custom",
         customTheme: { base: "#0b0e14", accent: "#5b7cfa" },
-        extendedSorting: false,
-      },
+      }),
     });
     apiMock.setCustomTheme.mockRejectedValueOnce(new Error("boom"));
 
-    let rafQueue: (FrameRequestCallback | null)[] = [];
-    vi.useFakeTimers();
-    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
-      rafQueue.push(cb);
-      return rafQueue.length - 1;
-    });
-    vi.stubGlobal("cancelAnimationFrame", (id: number) => {
-      rafQueue[id] = null;
-    });
+    useQueuedRaf();
     try {
       renderModal();
       openCustomisationTab();
       const colourInput = document.querySelector<HTMLInputElement>('input[type="color"]')!;
       fireEvent.change(colourInput, { target: { value: "#102030" } });
-      rafQueue.forEach((cb) => cb?.(0));
-      rafQueue = [];
+      flushRaf();
       vi.advanceTimersByTime(400);
 
       await act(async () => {
@@ -411,8 +402,7 @@ describe("Customisation tab — themes", () => {
       expect(document.documentElement.style.getPropertyValue("--surface-950")).toBe("11 14 20");
       expect(screen.getByText(/boom/)).toBeInTheDocument();
     } finally {
-      vi.unstubAllGlobals();
-      vi.useRealTimers();
+      restoreTimersAndRaf();
     }
   });
 });

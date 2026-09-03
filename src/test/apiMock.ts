@@ -8,8 +8,13 @@ import { vi } from "vitest";
  *     return { api: m.apiMock, localCover: m.localCoverMock };
  *   });
  *
- * `clearMocks` wipes call history between tests; return values are set per
- * test/beforeEach via mockResolvedValue.
+ * Mock-reset convention: the vitest config's `clearMocks: true` wipes call
+ * history between tests, so tests never call mockClear(). Implementations
+ * (queued mockResolvedValueOnce values included) are NOT cleared by clearMocks
+ * — a beforeEach that seeds defaults calls `.mockReset()` explicitly on exactly
+ * the mocks it re-seeds, chaining the fresh default:
+ *
+ *   apiMock.libraryQuery.mockReset().mockResolvedValue([]);
  */
 const NAMES = [
   "getProfile",

@@ -10,35 +10,18 @@ vi.mock("../api", async () => {
 import { apiMock, localCoverMock } from "../test/apiMock";
 import { useApp } from "../store";
 import Search from "./Search";
+import { deferred, flushMicrotasks, makeCachedGame } from "../test/utils";
 import type { CachedGame, SearchOutcome } from "../types";
 
-function deferred<T>() {
-  let resolve!: (v: T) => void;
-  let reject!: (e: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-
 function game(overrides: Partial<CachedGame> = {}): CachedGame {
-  return {
+  return makeCachedGame({
     rawgId: 1,
     name: "Halo",
-    coverUrl: null,
     genres: ["Shooter", "Sci-Fi"],
     platforms: ["Xbox"],
     releaseDate: "2001-11-15",
     developer: "Bungie",
     ...overrides,
-  };
-}
-
-function flushMicrotasks() {
-  return act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
   });
 }
 
@@ -62,9 +45,10 @@ const DEFAULT_FILTERS = {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.resetAllMocks();
-  localCoverMock.mockResolvedValue(null);
-  apiMock.libraryQuery.mockResolvedValue([]);
+  localCoverMock.mockReset().mockResolvedValue(null);
+  apiMock.libraryQuery.mockReset().mockResolvedValue([]);
+  apiMock.searchGames.mockReset();
+  apiMock.addToLibrary.mockReset();
   useApp.setState({ profile: null, profileLoading: false, hasApiKey: true });
 });
 

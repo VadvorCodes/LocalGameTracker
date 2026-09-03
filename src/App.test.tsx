@@ -9,7 +9,7 @@ vi.mock("./api", async () => {
 import { apiMock, localCoverMock } from "./test/apiMock";
 import { useApp } from "./store";
 import App from "./App";
-import { makeAnalytics, makeEntry, makeProfile } from "./test/utils";
+import { defaultSettings, makeAnalytics, makeEntry, makeProfile } from "./test/utils";
 
 /** App owns its BrowserRouter; jsdom's URL decides the entry route. */
 function at(path: string) {
@@ -22,27 +22,24 @@ function appReady() {
 }
 
 beforeEach(() => {
-  vi.resetAllMocks();
   window.localStorage.clear();
   document.documentElement.style.cssText = "";
   at("/");
   const profile = makeProfile();
-  apiMock.getProfile.mockResolvedValue(profile);
-  apiMock.getApiKey.mockResolvedValue({ hasKey: true });
-  apiMock.getSettings.mockResolvedValue({
-    theme: "midnight",
-    customTheme: null,
-    extendedSorting: false,
-  });
-  apiMock.libraryQuery.mockResolvedValue([]);
-  apiMock.getGenresAndPlatforms.mockResolvedValue({ genres: [], platforms: [] });
-  apiMock.getAnalytics.mockResolvedValue(makeAnalytics());
-  localCoverMock.mockResolvedValue(null);
+  apiMock.getProfile.mockReset().mockResolvedValue(profile);
+  apiMock.getApiKey.mockReset().mockResolvedValue({ hasKey: true });
+  apiMock.getSettings.mockReset().mockResolvedValue(defaultSettings());
+  apiMock.libraryQuery.mockReset().mockResolvedValue([]);
+  apiMock.getGenresAndPlatforms.mockReset().mockResolvedValue({ genres: [], platforms: [] });
+  apiMock.getAnalytics.mockReset().mockResolvedValue(makeAnalytics());
+  apiMock.getLibraryEntry.mockReset();
+  apiMock.renameProfile.mockReset();
+  localCoverMock.mockReset().mockResolvedValue(null);
   useApp.setState({
     profile: null,
     profileLoading: true,
     hasApiKey: true,
-    settings: { theme: "midnight", customTheme: null, extendedSorting: false },
+    settings: defaultSettings(),
   });
 });
 
@@ -71,11 +68,7 @@ describe("App — boot sequence", () => {
   });
 
   it("applies the persisted theme to the document root on boot", async () => {
-    apiMock.getSettings.mockResolvedValueOnce({
-      theme: "ocean",
-      customTheme: null,
-      extendedSorting: false,
-    });
+    apiMock.getSettings.mockResolvedValueOnce(defaultSettings({ theme: "ocean" }));
     render(<App />);
     await appReady();
     expect(document.documentElement.style.getPropertyValue("--surface-950")).toBe("6 16 22");
@@ -87,9 +80,7 @@ describe("App — boot sequence", () => {
     await appReady();
     expect(document.documentElement.style.getPropertyValue("--accent-500")).toBe("91 124 250");
     await act(async () => {
-      useApp.setState({
-        settings: { theme: "crimson", customTheme: null, extendedSorting: false },
-      });
+      useApp.setState({ settings: defaultSettings({ theme: "crimson" }) });
     });
     expect(document.documentElement.style.getPropertyValue("--accent-500")).toBe("232 68 96");
   });

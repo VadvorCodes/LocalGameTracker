@@ -1,12 +1,13 @@
-import { act, render } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import type { ReactElement } from "react";
-import type { LibraryEntry, MiniEntry, Profile, ReratePoolItem } from "../types";
-
-/** Render a component that uses routing (useNavigate / Link / useParams). */
-export function renderWithRouter(ui: ReactElement, { route = "/" }: { route?: string } = {}) {
-  return render(<MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>);
-}
+import { act, fireEvent } from "@testing-library/react";
+import { vi } from "vitest";
+import type {
+  CachedGame,
+  LibraryEntry,
+  MiniEntry,
+  Profile,
+  ReratePoolItem,
+  UiSettings,
+} from "../types";
 
 let nextId = 1000;
 
@@ -60,6 +61,25 @@ export function makeMini(overrides: Partial<MiniEntry> = {}): MiniEntry {
     overall: 80,
     ...overrides,
   };
+}
+
+/** A bare RAWG cache hit; tests override the fields they care about. */
+export function makeCachedGame(overrides: Partial<CachedGame> = {}): CachedGame {
+  return {
+    rawgId: 0,
+    name: "",
+    coverUrl: null,
+    genres: [],
+    platforms: [],
+    releaseDate: null,
+    developer: null,
+    ...overrides,
+  };
+}
+
+/** The settings the store boots with; tests override the slices they care about. */
+export function defaultSettings(overrides: Partial<UiSettings> = {}): UiSettings {
+  return { theme: "midnight", customTheme: null, extendedSorting: false, ...overrides };
 }
 
 export function makePoolItem(
@@ -116,6 +136,83 @@ export function firePointer(el: Element, type: string, x: number, y: number) {
       } as MouseEventInit),
     );
   });
+}
+
+/** Resolve/reject a promise from the test, for racing slow responses. */
+export function deferred<T>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+/**
+ * Fire a `transitionend` event (act-wrapped so the handler's state update
+ * commits). `propertyName` defaults to the card transform that fly-outs wait for.
+ */
+export function transitionEnd(el: Element, propertyName = "transform") {
+  const evt = new Event("transitionend", { bubbles: true });
+  Object.defineProperty(evt, "propertyName", { value: propertyName });
+  act(() => {
+    fireEvent(el, evt);
+  });
+}
+
+/** Settle pending promise chains inside act (two microtask turns). */
+export function flushMicrotasks() {
+  return act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+/** A minimal DataTransfer stand-in, since jsdom drag events ship without one. */
+export function makeDataTransfer() {
+  const data: Record<string, string> = {};
+  return {
+    data,
+    setData(type: string, v: string) {
+      data[type] = v;
+    },
+    getData(type: string) {
+      return data[type];
+    },
+    effectAllowed: "",
+    dropEffect: "",
+  };
+}
+
+// Deterministic rAF: callbacks are queued and flushed explicitly, so tests do
+// not depend on how jsdom schedules frames under fake timers.
+let rafQueue: (FrameRequestCallback | null)[] = [];
+
+/** Run (and clear) the animation-frame callbacks queued since the last flush. */
+export function flushRaf() {
+  const pending = rafQueue;
+  rafQueue = [];
+  pending.forEach((cb) => cb?.(16));
+}
+
+/** Fake timers plus a queued requestAnimationFrame stub. Pair with restoreTimersAndRaf(). */
+export function useQueuedRaf() {
+  rafQueue = [];
+  vi.useFakeTimers();
+  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+    rafQueue.push(cb);
+    return rafQueue.length - 1;
+  });
+  vi.stubGlobal("cancelAnimationFrame", (id: number) => {
+    rafQueue[id] = null;
+  });
+}
+
+/** Undo useQueuedRaf: restore the real timers and globals. */
+export function restoreTimersAndRaf() {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
 }
 
 /** Stub getBoundingClientRect on all current matches of a selector. */

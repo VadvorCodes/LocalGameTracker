@@ -10,9 +10,8 @@ import { localCoverMock } from "../test/apiMock";
 import CoverImage from "./CoverImage";
 
 beforeEach(() => {
-  localCoverMock.mockReset();
   // CoverImage always resolves localCover, even for a null URL.
-  localCoverMock.mockResolvedValue(null);
+  localCoverMock.mockReset().mockResolvedValue(null);
 });
 
 describe("CoverImage", () => {

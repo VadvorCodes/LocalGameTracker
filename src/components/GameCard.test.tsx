@@ -11,8 +11,7 @@ import { GameCard, SkeletonCard } from "./GameCard";
 import { makeEntry } from "../test/utils";
 
 beforeEach(() => {
-  localCoverMock.mockReset();
-  localCoverMock.mockResolvedValue(null);
+  localCoverMock.mockReset().mockResolvedValue(null);
 });
 
 describe("GameCard", () => {
@@ -29,31 +28,29 @@ describe("GameCard", () => {
   });
 
   it("shows the favourite heart only when favourite", () => {
-    const { container, rerender } = render(
+    const { rerender } = render(
       <GameCard entry={makeEntry({ favourite: false })} onOpen={() => {}} />,
     );
-    expect(container.querySelector(".text-rose-400")).toBeNull();
+    expect(screen.queryByRole("img", { name: "Favourite" })).toBeNull();
 
     rerender(<GameCard entry={makeEntry({ favourite: true })} onOpen={() => {}} />);
-    expect(container.querySelector(".text-rose-400")).not.toBeNull();
+    expect(screen.getByRole("img", { name: "Favourite" })).toBeInTheDocument();
   });
 
   it("shows the overall badge only when a detailed score exists, coloured by tier", () => {
-    const { container, rerender } = render(
+    const { rerender } = render(
       <GameCard entry={makeEntry({ computedOverall: null })} onOpen={() => {}} />,
     );
-    expect(container.querySelector(".font-semibold.rounded")).toBeNull();
+    expect(screen.queryByText(/^\d+\.\d$/)).toBeNull();
 
     rerender(<GameCard entry={makeEntry({ computedOverall: 82.3 })} onOpen={() => {}} />);
-    const badge = () => container.querySelector(".font-semibold.rounded")!;
-    expect(badge()).toHaveTextContent("82.3");
-    expect(badge()).toHaveClass("text-emerald-300");
+    expect(screen.getByText("82.3")).toHaveClass("text-emerald-300");
 
     rerender(<GameCard entry={makeEntry({ computedOverall: 60 })} onOpen={() => {}} />);
-    expect(badge()).toHaveClass("text-amber-300");
+    expect(screen.getByText("60.0")).toHaveClass("text-amber-300");
 
     rerender(<GameCard entry={makeEntry({ computedOverall: 20 })} onOpen={() => {}} />);
-    expect(badge()).toHaveClass("text-rose-300");
+    expect(screen.getByText("20.0")).toHaveClass("text-rose-300");
   });
 
   it("shows the playtime/genre footer only when playtime or genres exist", () => {
@@ -88,8 +85,8 @@ describe("GameCard", () => {
 
 describe("SkeletonCard", () => {
   it("renders a pulsing placeholder without content", () => {
-    render(<SkeletonCard />);
-    expect(document.querySelector(".animate-pulse")).toBeInTheDocument();
-    expect(screen.queryByTitle("Game 55")).toBeNull();
+    const { container } = render(<SkeletonCard />);
+    expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
+    expect(container.textContent).toBe(""); // no real card content leaks through
   });
 });

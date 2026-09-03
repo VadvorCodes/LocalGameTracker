@@ -2,14 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { StarPicker, Stars } from "./StarRating";
 
-/** The clipped overlay width per star ("100%", "50%", "0%"). */
-function starFills(container: HTMLElement, starClass: string): string[] {
-  return Array.from(container.querySelectorAll(`.${starClass}`)).map(
-    (star) => (star.querySelector("span.overflow-hidden") as HTMLElement | null)?.style.width ?? "",
+/** The clipped overlay width per star ("100%", "50%", "0%"), in star order. */
+function starFills(container: HTMLElement): string[] {
+  return Array.from(container.querySelectorAll<HTMLElement>('[data-testid="star-fill"]')).map(
+    (el) => el.style.width,
   );
 }
-
-const READONLY_STAR = "relative.inline-block.w-4.h-4";
 
 describe("Stars (read-only)", () => {
   it("renders 'not rated' for null", () => {
@@ -20,12 +18,12 @@ describe("Stars (read-only)", () => {
   it("exposes the value in the title and clips fills at halves", () => {
     const { container } = render(<Stars value={2.5} />);
     expect(container.querySelector('[title="2.5 / 5 stars"]')).toBeInTheDocument();
-    expect(starFills(container, READONLY_STAR)).toEqual(["100%", "100%", "50%", "0%", "0%"]);
+    expect(starFills(container)).toEqual(["100%", "100%", "50%", "0%", "0%"]);
   });
 
   it("fills all five for a 5", () => {
     const { container } = render(<Stars value={5} />);
-    expect(starFills(container, READONLY_STAR)).toEqual(["100%", "100%", "100%", "100%", "100%"]);
+    expect(starFills(container)).toEqual(["100%", "100%", "100%", "100%", "100%"]);
   });
 });
 
@@ -70,12 +68,12 @@ describe("StarPicker", () => {
 
   it("previews hover values in the fills and resets on mouse leave", () => {
     const { container } = render(<StarPicker value={3} onChange={() => {}} />);
-    expect(starFills(container, "w-8.h-8")).toEqual(["100%", "100%", "100%", "0%", "0%"]);
+    expect(starFills(container)).toEqual(["100%", "100%", "100%", "0%", "0%"]);
 
     fireEvent.mouseEnter(screen.getByLabelText("4.5 stars"));
-    expect(starFills(container, "w-8.h-8")).toEqual(["100%", "100%", "100%", "100%", "50%"]);
+    expect(starFills(container)).toEqual(["100%", "100%", "100%", "100%", "50%"]);
 
     fireEvent.mouseLeave(container.querySelector("div.select-none")!);
-    expect(starFills(container, "w-8.h-8")).toEqual(["100%", "100%", "100%", "0%", "0%"]);
+    expect(starFills(container)).toEqual(["100%", "100%", "100%", "0%", "0%"]);
   });
 });

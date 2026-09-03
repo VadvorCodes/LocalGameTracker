@@ -19,7 +19,11 @@ export function GameCard({ entry, onOpen }: { entry: LibraryEntry; onOpen: (id: 
         />
         <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-surface-900 to-transparent" />
         {entry.favourite && (
-          <div className="absolute top-2 right-2 text-rose-400 bg-surface-950/70 rounded-full p-1.5">
+          <div
+            className="absolute top-2 right-2 text-rose-400 bg-surface-950/70 rounded-full p-1.5"
+            role="img"
+            aria-label="Favourite"
+          >
             <HeartIcon filled />
           </div>
         )}

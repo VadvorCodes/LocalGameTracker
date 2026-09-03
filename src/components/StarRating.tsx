@@ -13,6 +13,7 @@ export function Stars({ value }: { value: number | null }) {
           </span>
           <span
             className="absolute inset-0 overflow-hidden"
+            data-testid="star-fill"
             style={{ width: `${Math.max(0, Math.min(1, value - i)) * 100}%` }}
           >
             <StarIcon filled />
@@ -69,6 +70,7 @@ export function StarPicker({
                     clips the glyph at exactly its midpoint. */}
                 <span
                   className="absolute inset-0 overflow-hidden"
+                  data-testid="star-fill"
                   style={{ width: `${fill * 100}%` }}
                 >
                   <StarIcon filled className="w-5 h-5" />

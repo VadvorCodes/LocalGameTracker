@@ -14,8 +14,10 @@ import { makeEntry, makeProfile } from "../../test/utils";
 const WEIGHTS = { gameplay: 50, story: 25, music: 15, technical: 10 };
 
 beforeEach(() => {
-  vi.resetAllMocks();
-  localCoverMock.mockResolvedValue(null);
+  localCoverMock.mockReset().mockResolvedValue(null);
+  apiMock.markRerated.mockReset();
+  apiMock.setStarRating.mockReset();
+  apiMock.setCategoryScores.mockReset();
   useApp.setState({ profile: makeProfile({ categoryWeights: WEIGHTS }) });
 });
 
@@ -98,7 +100,7 @@ describe("RerateRatingPanel saving", () => {
     const updated = makeEntry({ id: 5, starRating: 4 });
     apiMock.setStarRating.mockResolvedValueOnce(updated);
     apiMock.markRerated.mockResolvedValueOnce(undefined);
-    const { entry, onSaved } = renderPanel(makeEntry({ id: 5 }));
+    const { onSaved } = renderPanel(makeEntry({ id: 5 }));
     fireEvent.click(screen.getByLabelText("4 stars"));
     fireEvent.click(screen.getByRole("button", { name: "Save & continue" }));
 
@@ -106,7 +108,6 @@ describe("RerateRatingPanel saving", () => {
     expect(apiMock.setStarRating).toHaveBeenCalledWith(5, 4);
     expect(apiMock.setCategoryScores).not.toHaveBeenCalled();
     expect(apiMock.markRerated).toHaveBeenCalledWith(5);
-    expect(entry).toBeDefined();
   });
 
   it("with both changed: the category-score response wins as the saved entry", async () => {

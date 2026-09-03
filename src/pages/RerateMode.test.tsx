@@ -10,7 +10,15 @@ vi.mock("../api", async () => {
 import { apiMock, localCoverMock } from "../test/apiMock";
 import { useApp } from "../store";
 import RerateMode from "./RerateMode";
-import { makeEntry, makePoolItem } from "../test/utils";
+import {
+  defaultSettings,
+  flushMicrotasks,
+  makeDataTransfer,
+  makeEntry,
+  makePoolItem,
+  stubRects,
+  transitionEnd,
+} from "../test/utils";
 import type { LibraryEntry, ReratePoolItem } from "../types";
 
 function renderRerate() {
@@ -21,26 +29,9 @@ function renderRerate() {
   );
 }
 
-/** The flying SwipeCard root element (identified by its fixed width class). */
+/** The flying SwipeCard root element. */
 function swipeCard() {
-  return Array.from(document.querySelectorAll(".card")).find((el) =>
-    el.classList.contains("w-[380px]"),
-  ) as HTMLElement;
-}
-
-function transitionEnd(el: Element) {
-  const evt = new Event("transitionend", { bubbles: true });
-  Object.defineProperty(evt, "propertyName", { value: "transform" });
-  act(() => {
-    fireEvent(el, evt);
-  });
-}
-
-async function flush() {
-  await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-  });
+  return document.querySelector<HTMLElement>('[data-testid="swipe-card"]')!;
 }
 
 async function startCycle(pool: ReratePoolItem[], rows: Partial<LibraryEntry>[] = [{}, {}]) {
@@ -58,18 +49,19 @@ async function decide(buttonName: string) {
   const card = swipeCard();
   expect(card).toBeDefined();
   transitionEnd(card);
-  await flush();
+  await flushMicrotasks();
 }
 
 beforeEach(() => {
-  vi.resetAllMocks();
-  localCoverMock.mockResolvedValue(null);
-  apiMock.libraryQuery.mockResolvedValue([]);
-  apiMock.markRerated.mockResolvedValue(undefined);
+  localCoverMock.mockReset().mockResolvedValue(null);
+  apiMock.libraryQuery.mockReset().mockResolvedValue([]);
+  apiMock.startRerateSession.mockReset();
+  apiMock.markRerated.mockReset().mockResolvedValue(undefined);
+  apiMock.setStarRating.mockReset();
   useApp.setState({
     profile: null,
     profileLoading: false,
-    settings: { theme: "midnight", customTheme: null, extendedSorting: false },
+    settings: defaultSettings(),
   });
 });
 
@@ -246,7 +238,7 @@ describe("RerateMode — swipe phase", () => {
     });
     const card = swipeCard();
     transitionEnd(card);
-    await flush();
+    await flushMicrotasks();
     expect(screen.getByText("Game 2 of 2 · 1 categorised")).toBeInTheDocument();
   });
 
@@ -256,7 +248,7 @@ describe("RerateMode — swipe phase", () => {
     const card = swipeCard();
     transitionEnd(card);
     transitionEnd(card); // double fire
-    await flush();
+    await flushMicrotasks();
     expect(screen.getByText("Game 2 of 2 · 1 categorised")).toBeInTheDocument();
   });
 
@@ -309,45 +301,20 @@ describe("RerateMode — review phase", () => {
   it("reorders a pile when a row is dragged onto another row", async () => {
     await enterReview();
     const section = screen.getByText("Re-rate — 2").closest("section")!;
-    const [alphaRow, betaRow] = section.querySelectorAll("[data-pile-row]");
+    // Beta sits below Alpha; stubRects stacks them by index (i = 0 → Alpha).
+    const betaRow = section.querySelectorAll("[data-pile-row]")[1];
 
-    const dataTransfer = {
-      data: {} as Record<string, string>,
-      setData(type: string, v: string) {
-        this.data[type] = v;
-      },
-      getData(type: string) {
-        return this.data[type];
-      },
-      effectAllowed: "",
-      dropEffect: "",
-    };
+    const dataTransfer = makeDataTransfer();
 
-    // drag Beta over the upper half of Alpha
-    alphaRow.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        top: 0,
-        right: 200,
-        bottom: 60,
-        width: 200,
-        height: 60,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      }) as DOMRect;
-    betaRow.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        top: 70,
-        right: 200,
-        bottom: 130,
-        width: 200,
-        height: 60,
-        x: 0,
-        y: 70,
-        toJSON: () => ({}),
-      }) as DOMRect;
+    // two stacked rows: Alpha on top (i = 0), Beta below it (i = 1)
+    stubRects(section, "[data-pile-row]", (_el, i) => ({
+      left: 0,
+      right: 200,
+      width: 200,
+      top: i * 70,
+      bottom: i * 70 + 60,
+      height: 60,
+    }));
 
     const startEvt = new Event("dragstart", { bubbles: true, cancelable: true });
     Object.defineProperty(startEvt, "dataTransfer", { value: dataTransfer });
@@ -368,7 +335,7 @@ describe("RerateMode — review phase", () => {
     Object.defineProperty(dropEvt, "clientY", { value: 30 });
     act(() => fireEvent(section, dropEvt));
 
-    await flush();
+    await flushMicrotasks();
     const rows = section.querySelectorAll("[data-pile-row]");
     expect(rows[0].textContent).toContain("Beta");
     expect(rows[1].textContent).toContain("Alpha");
@@ -381,56 +348,23 @@ describe("RerateMode — review phase", () => {
     const rerateSection = screen.getByText("Re-rate — 2").closest("section")!;
     const gammaRow = keepSection.querySelector("[data-pile-row]")!;
 
-    const dataTransfer = {
-      data: {} as Record<string, string>,
-      setData(type: string, v: string) {
-        this.data[type] = v;
-      },
-      getData(type: string) {
-        return this.data[type];
-      },
-      effectAllowed: "",
-      dropEffect: "",
-    };
-    gammaRow.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        top: 0,
-        right: 200,
-        bottom: 60,
-        width: 200,
-        height: 60,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      }) as DOMRect;
+    const dataTransfer = makeDataTransfer();
+    const rowRect = { left: 0, right: 200, width: 200, top: 0, bottom: 60, height: 60 };
+    stubRects(keepSection, "[data-pile-row]", () => rowRect);
 
     const startEvt = new Event("dragstart", { bubbles: true, cancelable: true });
     Object.defineProperty(startEvt, "dataTransfer", { value: dataTransfer });
     act(() => fireEvent(gammaRow, startEvt));
 
     // drop far below the (empty of rows) re-rate section → appended
-    rerateSection.querySelectorAll("[data-pile-row]").forEach((r) => {
-      r.getBoundingClientRect = () =>
-        ({
-          left: 0,
-          top: 0,
-          right: 200,
-          bottom: 60,
-          width: 200,
-          height: 60,
-          x: 0,
-          y: 0,
-          toJSON: () => ({}),
-        }) as DOMRect;
-    });
+    stubRects(rerateSection, "[data-pile-row]", () => rowRect);
     const dropEvt = new Event("drop", { bubbles: true, cancelable: true });
     Object.defineProperty(dropEvt, "dataTransfer", { value: dataTransfer });
     Object.defineProperty(dropEvt, "clientX", { value: 100 });
     Object.defineProperty(dropEvt, "clientY", { value: 500 }); // below all rows → append
     act(() => fireEvent(rerateSection, dropEvt));
 
-    await flush();
+    await flushMicrotasks();
     expect(screen.getByText("Re-rate — 3")).toBeInTheDocument();
     expect(screen.getByText("Keep rating — 0")).toBeInTheDocument();
     // empty pile shows the drop placeholder

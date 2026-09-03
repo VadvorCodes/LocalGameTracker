@@ -8,19 +8,19 @@ vi.mock("../api", async () => {
 
 import { localCoverMock } from "../test/apiMock";
 import SearchResultCard from "./SearchResultCard";
+import { makeCachedGame } from "../test/utils";
 import type { CachedGame } from "../types";
 
 function game(overrides: Partial<CachedGame> = {}): CachedGame {
-  return {
+  return makeCachedGame({
     rawgId: 1,
     name: "Halo",
-    coverUrl: null,
     genres: ["Shooter", "Sci-Fi", "Adventure"],
     platforms: ["Xbox"],
     releaseDate: "2001-11-15",
     developer: "Bungie",
     ...overrides,
-  };
+  });
 }
 
 function renderCard(overrides: Partial<Parameters<typeof SearchResultCard>[0]> = {}) {
@@ -42,8 +42,7 @@ function renderCard(overrides: Partial<Parameters<typeof SearchResultCard>[0]> =
 }
 
 beforeEach(() => {
-  localCoverMock.mockReset();
-  localCoverMock.mockResolvedValue(null);
+  localCoverMock.mockReset().mockResolvedValue(null);
 });
 
 describe("SearchResultCard", () => {

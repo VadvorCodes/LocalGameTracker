@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render } from "@testing-library/react";
+import { render } from "@testing-library/react";
 
 vi.mock("../../api", async () => {
   const m = await import("../../test/apiMock");
@@ -8,12 +8,11 @@ vi.mock("../../api", async () => {
 
 import { localCoverMock } from "../../test/apiMock";
 import SwipeCard from "./SwipeCard";
-import { firePointer, makePoolItem } from "../../test/utils";
+import { firePointer, makePoolItem, transitionEnd } from "../../test/utils";
 import type { RerateDecision } from "../../types";
 
 beforeEach(() => {
-  localCoverMock.mockReset();
-  localCoverMock.mockResolvedValue(null);
+  localCoverMock.mockReset().mockResolvedValue(null);
 });
 
 function renderCard(overrides: { exitRequest?: RerateDecision | null } = {}) {
@@ -34,7 +33,7 @@ function renderCard(overrides: { exitRequest?: RerateDecision | null } = {}) {
       onDragX={onDragX}
     />,
   );
-  const card = view.container.querySelector<HTMLElement>(".card")!;
+  const card = view.container.querySelector<HTMLElement>('[data-testid="swipe-card"]')!;
   return { onDecided, onDragX, card, view, item };
 }
 
@@ -44,12 +43,6 @@ function drag(card: HTMLElement, x0: number, x1: number) {
   firePointer(card, "pointermove", x0 + Math.round((x1 - x0) / 2), 200);
   firePointer(card, "pointermove", x1, 200);
   firePointer(card, "pointerup", x1, 200);
-}
-
-function transitionEnd(card: HTMLElement, propertyName: string) {
-  const evt = new Event("transitionend", { bubbles: true });
-  Object.defineProperty(evt, "propertyName", { value: propertyName });
-  fireEvent(card, evt);
 }
 
 describe("SwipeCard rendering", () => {

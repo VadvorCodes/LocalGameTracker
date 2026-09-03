@@ -44,7 +44,7 @@ vi.mock("../api", async () => {
 import { apiMock, localCoverMock } from "../test/apiMock";
 import { useApp } from "../store";
 import Dashboard from "./Dashboard";
-import { makeAnalytics, makeMini, makeProfile } from "../test/utils";
+import { defaultSettings, makeAnalytics, makeMini, makeProfile } from "../test/utils";
 
 function renderDashboard() {
   return render(
@@ -63,13 +63,12 @@ function chart(container: HTMLElement, name: string) {
 }
 
 beforeEach(() => {
-  vi.resetAllMocks();
-  localCoverMock.mockResolvedValue(null);
-  apiMock.getAnalytics.mockResolvedValue(makeAnalytics());
+  localCoverMock.mockReset().mockResolvedValue(null);
+  apiMock.getAnalytics.mockReset().mockResolvedValue(makeAnalytics());
   useApp.setState({
     profile: makeProfile(),
     profileLoading: false,
-    settings: { theme: "midnight", customTheme: null, extendedSorting: false },
+    settings: defaultSettings(),
   });
 });
 
@@ -262,7 +261,7 @@ describe("Dashboard — breakdowns and lists", () => {
     expect(screen.getByText("Indie").nextElementSibling!.firstElementChild).toHaveStyle({
       width: "50%",
     });
-    expect(screen.getByText(" · 78".trim())).toHaveClass("text-emerald-300");
+    expect(screen.getByText("· 78")).toHaveClass("text-emerald-300");
 
     // clicking a recently-rated game opens its detail page
     fireEvent.click(screen.getByText("Recent Game"));

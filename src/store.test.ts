@@ -2,26 +2,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./api", async () => {
   const m = await import("./test/apiMock");
-  return { api: m.apiMock };
+  return { api: m.apiMock, localCover: m.localCoverMock };
 });
 
 import { apiMock } from "./test/apiMock";
 import { useApp } from "./store";
-import { makeProfile } from "./test/utils";
+import { defaultSettings, makeProfile } from "./test/utils";
 import type { UiSettings } from "./types";
-
-const DEFAULT_SETTINGS: UiSettings = {
-  theme: "midnight",
-  customTheme: null,
-  extendedSorting: false,
-};
 
 beforeEach(() => {
   useApp.setState({
     profile: null,
     profileLoading: true,
     hasApiKey: true,
-    settings: DEFAULT_SETTINGS,
+    settings: defaultSettings(),
   });
 });
 
@@ -69,11 +63,11 @@ describe("loadApiKeyStatus", () => {
 
 describe("loadSettings", () => {
   it("replaces the default settings with persisted ones", async () => {
-    const settings: UiSettings = {
+    const settings: UiSettings = defaultSettings({
       theme: "ocean",
       customTheme: { base: "#111111", accent: "#ff0000" },
       extendedSorting: true,
-    };
+    });
     apiMock.getSettings.mockResolvedValueOnce(settings);
     await useApp.getState().loadSettings();
     expect(useApp.getState().settings).toEqual(settings);
@@ -82,7 +76,7 @@ describe("loadSettings", () => {
   it("keeps defaults on error", async () => {
     apiMock.getSettings.mockRejectedValueOnce(new Error("boom"));
     await useApp.getState().loadSettings();
-    expect(useApp.getState().settings).toEqual(DEFAULT_SETTINGS);
+    expect(useApp.getState().settings).toEqual(defaultSettings());
   });
 });
 
@@ -92,7 +86,7 @@ describe("plain setters", () => {
     useApp.getState().setProfile(profile);
     expect(useApp.getState().profile).toBe(profile);
 
-    const settings: UiSettings = { theme: "violet", customTheme: null, extendedSorting: false };
+    const settings: UiSettings = defaultSettings({ theme: "violet" });
     useApp.getState().setSettings(settings);
     expect(useApp.getState().settings).toBe(settings);
   });

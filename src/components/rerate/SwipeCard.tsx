@@ -69,6 +69,7 @@ export default function SwipeCard({
   return (
     <div
       className="card w-[380px] max-w-full overflow-hidden select-none cursor-grab active:cursor-grabbing shadow-2xl shadow-black/50"
+      data-testid="swipe-card"
       style={{
         transform,
         transition: dragging ? "none" : "transform 280ms cubic-bezier(0.2, 0.8, 0.3, 1)",

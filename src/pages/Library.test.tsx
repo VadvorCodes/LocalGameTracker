@@ -10,18 +10,8 @@ vi.mock("../api", async () => {
 import { apiMock, localCoverMock } from "../test/apiMock";
 import { useApp } from "../store";
 import Library from "./Library";
-import { makeEntry, makeProfile } from "../test/utils";
+import { defaultSettings, deferred, makeEntry, makeProfile } from "../test/utils";
 import type { LibraryEntry } from "../types";
-
-function deferred<T>() {
-  let resolve!: (v: T) => void;
-  let reject!: (e: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
 
 function renderLibrary() {
   return render(
@@ -51,17 +41,16 @@ function lastQuery() {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.resetAllMocks();
-  localCoverMock.mockResolvedValue(null);
-  apiMock.libraryQuery.mockResolvedValue([]);
-  apiMock.getGenresAndPlatforms.mockResolvedValue({
+  localCoverMock.mockReset().mockResolvedValue(null);
+  apiMock.libraryQuery.mockReset().mockResolvedValue([]);
+  apiMock.getGenresAndPlatforms.mockReset().mockResolvedValue({
     genres: ["RPG", "Indie"],
     platforms: ["PC", "Switch"],
   });
   useApp.setState({
     profile: makeProfile(),
     profileLoading: false,
-    settings: { theme: "midnight", customTheme: null, extendedSorting: false },
+    settings: defaultSettings(),
   });
 });
 
@@ -285,7 +274,7 @@ describe("Library — sort menu", () => {
     expect(screen.queryByRole("option", { name: "Playtime" })).toBeNull();
 
     useApp.setState({
-      settings: { theme: "midnight", customTheme: null, extendedSorting: true },
+      settings: defaultSettings({ extendedSorting: true }),
     });
     await act(async () => {});
     await flushLoad();
@@ -295,9 +284,7 @@ describe("Library — sort menu", () => {
   });
 
   it("queries with the chosen extended sort and direction", async () => {
-    useApp.setState({
-      settings: { theme: "midnight", customTheme: null, extendedSorting: true },
-    });
+    useApp.setState({ settings: defaultSettings({ extendedSorting: true }) });
     renderLibrary();
     await flushLoad();
 
@@ -311,18 +298,14 @@ describe("Library — sort menu", () => {
   });
 
   it("snaps back to Rating when extended sorting is switched off mid-sort", async () => {
-    useApp.setState({
-      settings: { theme: "midnight", customTheme: null, extendedSorting: true },
-    });
+    useApp.setState({ settings: defaultSettings({ extendedSorting: true }) });
     renderLibrary();
     await flushLoad();
     fireEvent.change(screen.getByDisplayValue("Rating"), { target: { value: "playtime" } });
     await flushLoad();
     expect(lastQuery().sort).toBe("playtime");
 
-    useApp.setState({
-      settings: { theme: "midnight", customTheme: null, extendedSorting: false },
-    });
+    useApp.setState({ settings: defaultSettings() });
     await act(async () => {});
     await flushLoad();
     // select cannot render a value that no longer exists as an option
