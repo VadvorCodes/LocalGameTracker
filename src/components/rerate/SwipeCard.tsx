@@ -68,7 +68,7 @@ export default function SwipeCard({
 
   return (
     <div
-      className="card w-[clamp(280px,30vw,380px)] max-w-full overflow-hidden select-none cursor-grab active:cursor-grabbing shadow-2xl shadow-black/50"
+      className="card w-full overflow-hidden select-none cursor-grab active:cursor-grabbing shadow-2xl shadow-black/50"
       data-testid="swipe-card"
       style={{
         transform,
@@ -92,9 +92,9 @@ export default function SwipeCard({
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
     >
-      {/* The cover yields height (max-h) on short windows so the name and
-          ratings below it stay visible — text outranks the portrait here. */}
-      <div className="relative aspect-[16/9] max-h-[24vh] overflow-hidden">
+      {/* The cover always spans the full card width; only on short windows
+          does it yield height (max-h) so the text below stays reachable. */}
+      <div className="relative aspect-[16/9] max-h-[36vh] overflow-hidden">
         <CoverImage
           url={entry.coverUrl}
           alt={entry.name}
