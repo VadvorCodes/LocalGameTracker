@@ -3,7 +3,7 @@ import { STATUS_COLORS, STATUS_LABELS } from "../types";
 import CoverImage from "./CoverImage";
 import { Stars } from "./StarRating";
 import { HeartIcon } from "./icons";
-import { formatPlaytime } from "../lib/format";
+import { formatPlaytime, scoreColor } from "../lib/format";
 
 export function GameCard({ entry, onOpen }: { entry: LibraryEntry; onOpen: (id: number) => void }) {
   return (
@@ -30,7 +30,9 @@ export function GameCard({ entry, onOpen }: { entry: LibraryEntry; onOpen: (id: 
         </h3>
         <div className="mt-2 space-y-1.5">
           <div>
-            <span className={`chip ${STATUS_COLORS[entry.status]}`}>
+            <span
+              className={`chip ${STATUS_COLORS[entry.status].bg} ${STATUS_COLORS[entry.status].text} ${STATUS_COLORS[entry.status].border}`}
+            >
               {STATUS_LABELS[entry.status]}
             </span>
           </div>
@@ -38,13 +40,7 @@ export function GameCard({ entry, onOpen }: { entry: LibraryEntry; onOpen: (id: 
             <Stars value={entry.starRating} />
             {entry.computedOverall != null && (
               <span
-                className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
-                  entry.computedOverall >= 75
-                    ? "text-emerald-300"
-                    : entry.computedOverall >= 50
-                      ? "text-amber-300"
-                      : "text-rose-300"
-                }`}
+                className={`text-xs font-semibold px-1.5 py-0.5 rounded ${scoreColor(entry.computedOverall)}`}
               >
                 {entry.computedOverall.toFixed(1)}
               </span>

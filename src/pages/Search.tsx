@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import type { CachedGame, PlayStatus, SearchOutcome } from "../types";
-import { STATUS_LABELS } from "../types";
+import { STATUSES, STATUS_LABELS } from "../types";
 import CoverImage from "../components/CoverImage";
 import FilterGroup from "../components/FilterGroup";
 import MixBar from "../components/MixBar";
@@ -15,7 +15,6 @@ import {
 } from "../lib/searchRank";
 import { useApp } from "../store";
 
-const STATUSES: PlayStatus[] = ["WantToPlay", "Playing", "Completed", "Dropped"];
 const YEAR_OPTIONS: number[] = [];
 for (let y = new Date().getFullYear() + 1; y >= 1970; y--) YEAR_OPTIONS.push(y);
 

@@ -19,16 +19,13 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "../api";
-import type { Analytics, MiniEntry } from "../types";
-import { STATUS_COLORS, STATUS_LABELS } from "../types";
-import type { PlayStatus } from "../types";
+import type { Analytics, MiniEntry, RatingMode } from "../types";
+import { STATUSES, STATUS_COLORS, STATUS_LABELS } from "../types";
 import CoverImage from "../components/CoverImage";
 import { Stars } from "../components/StarRating";
-import { themeVars } from "../lib/themes";
+import { cssColor, themeVars } from "../lib/themes";
 import { formatPlaytime, scoreColor } from "../lib/format";
 import { useApp } from "../store";
-
-export type RatingMode = "stars" | "detailed" | "both";
 
 const RATING_MODES: { key: RatingMode; label: string }[] = [
   { key: "stars", label: "★ Simple" },
@@ -46,13 +43,13 @@ export default function Dashboard() {
   // Chart colours derived from the active preset (not getComputedStyle — that
   // races applyTheme's DOM write and lags one render behind a theme switch).
   const palette = useMemo(() => {
-    const rgb = (name: string) => `rgb(${themeVars(settings.theme, settings.customTheme)[name]})`;
+    const vars = themeVars(settings.theme, settings.customTheme);
     return {
-      accent: rgb("--accent-500"),
-      grid: rgb("--surface-700"),
-      polarGrid: rgb("--surface-600"),
-      tooltipBg: rgb("--surface-800"),
-      tooltipBorder: rgb("--surface-600"),
+      accent: cssColor(vars, "--accent-500"),
+      grid: cssColor(vars, "--surface-700"),
+      polarGrid: cssColor(vars, "--surface-600"),
+      tooltipBg: cssColor(vars, "--surface-800"),
+      tooltipBorder: cssColor(vars, "--surface-600"),
     };
   }, [settings.theme, settings.customTheme]);
 
@@ -105,17 +102,14 @@ export default function Dashboard() {
       <div className="grid md:grid-cols-2 gap-4">
         <Panel title="Play status">
           <div className="space-y-2">
-            {(["WantToPlay", "Playing", "Completed", "Dropped"] as PlayStatus[]).map((s) => {
+            {STATUSES.map((s) => {
               const count = a.statusCounts.find((x) => x.status === s)?.count ?? 0;
               const pct = a.totalGames > 0 ? (count / a.totalGames) * 100 : 0;
               return (
                 <div key={s} className="flex items-center gap-3">
                   <span className="text-xs text-slate-400 w-24 shrink-0">{STATUS_LABELS[s]}</span>
                   <div className="flex-1 h-5 bg-surface-800 rounded overflow-hidden">
-                    <div
-                      className={`h-full ${STATUS_COLORS[s].split(" ")[0]}`}
-                      style={{ width: `${pct}%` }}
-                    />
+                    <div className={`h-full ${STATUS_COLORS[s].bg}`} style={{ width: `${pct}%` }} />
                   </div>
                   <span className="text-xs text-slate-500 w-8 text-right">{count}</span>
                 </div>

@@ -96,16 +96,18 @@ export default function MixBar({
             onKeyDown={onKeyDown(i as 0 | 1)}
           >
             <div className="absolute left-1/2 top-0 h-full w-0.5 -translate-x-1/2 bg-surface-950/50" />
-            {/* Grip knob: the visible "grab me" handle on each divider. */}
+            {/* Grip knob: the visible "grab me" handle on each divider. Idle it
+                reads as a dark pill (surface 600/800 are the lightest shades the
+                theme defines); hover/dragging flips it to accent + white. */}
             <div
               className={`absolute left-1/2 top-1/2 flex h-7 w-3.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-[2px] rounded-full border shadow-md transition-all ${
                 dragging === i
                   ? "scale-110 border-accent-400 bg-white"
-                  : "border-surface-500 bg-surface-200 group-hover/handle:scale-110 group-hover/handle:border-accent-400 group-hover/handle:bg-white"
+                  : "border-surface-600 bg-surface-800 group-hover/handle:scale-110 group-hover/handle:border-accent-400 group-hover/handle:bg-white"
               }`}
             >
-              <span className="h-3 w-px rounded bg-surface-500" />
-              <span className="h-3 w-px rounded bg-surface-500" />
+              <span className="h-3 w-px rounded bg-surface-600" />
+              <span className="h-3 w-px rounded bg-surface-600" />
             </div>
           </div>
         ))}

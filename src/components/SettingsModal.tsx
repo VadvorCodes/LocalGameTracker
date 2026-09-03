@@ -10,14 +10,8 @@ import {
   themeVars,
 } from "../lib/themes";
 import type { CategoryWeights, CustomThemeColours } from "../types";
+import { CATEGORIES, DEFAULT_WEIGHTS } from "../types";
 import CustomThemeEditor from "./CustomThemeEditor";
-
-const CATEGORIES: { key: keyof CategoryWeights; label: string }[] = [
-  { key: "gameplay", label: "Gameplay" },
-  { key: "story", label: "Storytelling" },
-  { key: "music", label: "Music" },
-  { key: "technical", label: "Technical Performance" },
-];
 
 const TABS = [
   { id: "general", label: "General" },
@@ -37,7 +31,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
   const [extendedSortBusy, setExtendedSortBusy] = useState(false);
   const [extendedSortError, setExtendedSortError] = useState<string | null>(null);
   const [weights, setWeights] = useState<CategoryWeights>(
-    profile?.categoryWeights ?? { gameplay: 25, story: 25, music: 25, technical: 25 },
+    profile?.categoryWeights ?? DEFAULT_WEIGHTS,
   );
   const [weightsBusy, setWeightsBusy] = useState(false);
   const [weightsMsg, setWeightsMsg] = useState<string | null>(null);

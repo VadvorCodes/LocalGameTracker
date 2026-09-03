@@ -8,6 +8,7 @@ import type {
   PlayStatus,
   Profile,
   ReratePoolItem,
+  RatingMode,
   SearchFilters,
   SearchOutcome,
   UiSettings,
@@ -59,8 +60,7 @@ export const api = {
     },
   ) => invoke<LibraryEntry>("set_category_scores", { entryId, scores }),
 
-  getAnalytics: (mode?: "stars" | "detailed" | "both") =>
-    invoke<Analytics>("get_analytics", { mode }),
+  getAnalytics: (mode?: RatingMode) => invoke<Analytics>("get_analytics", { mode }),
 
   getApiKey: () => invoke<{ hasKey: boolean }>("get_api_key"),
   setApiKey: (key: string) => invoke<{ hasKey: boolean }>("set_api_key", { key }),

@@ -2,7 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Default palette (Midnight preset) — overridden at runtime by src/lib/themes.ts.
+/* Default palette (Midnight preset) — keep in sync with THEMES[0] in
+   src/lib/themes.ts (two sources of truth: this block seeds the first paint
+   before JS runs, themes.ts takes over at runtime via applyTheme).
    Values are "r g b" triplets; tailwind.config.js wraps them with rgb(var() / alpha). */
 :root {
   --surface-950: 11 14 20;

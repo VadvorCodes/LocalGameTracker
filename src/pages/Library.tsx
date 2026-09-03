@@ -2,13 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import type { LibraryEntry, LibraryQuery, PlayStatus, SortKey } from "../types";
-import { SORT_LABELS, STATUS_COLORS, STATUS_LABELS } from "../types";
+import { SORT_LABELS, STATUSES, STATUS_COLORS, STATUS_LABELS } from "../types";
 import { GameCard, SkeletonCard } from "../components/GameCard";
 import FilterGroup from "../components/FilterGroup";
 import { formatPlaytime } from "../lib/format";
 import { useApp } from "../store";
 
-const STATUSES: PlayStatus[] = ["WantToPlay", "Playing", "Completed", "Dropped"];
 // Rating, detailed rating, date added and name sit at the top of the sort
 // menu; the "Other" and "By category" groups appear only when "Extended
 // sorting options" is enabled in Settings.
@@ -198,15 +197,22 @@ export default function Library() {
       {filterPanel && (
         <div className="card p-4 mb-6 space-y-4">
           <div className="flex flex-wrap gap-2">
-            {STATUSES.map((s) => (
-              <button
-                key={s}
-                className={`chip py-1.5 ${statuses.has(s) ? STATUS_COLORS[s] : "bg-surface-800 text-slate-400 border-surface-600"}`}
-                onClick={() => setStatuses(toggle(statuses, s))}
-              >
-                {STATUS_LABELS[s]}
-              </button>
-            ))}
+            {STATUSES.map((s) => {
+              const c = STATUS_COLORS[s];
+              return (
+                <button
+                  key={s}
+                  className={`chip py-1.5 ${
+                    statuses.has(s)
+                      ? `${c.bg} ${c.text} ${c.border}`
+                      : "bg-surface-800 text-slate-400 border-surface-600"
+                  }`}
+                  onClick={() => setStatuses(toggle(statuses, s))}
+                >
+                  {STATUS_LABELS[s]}
+                </button>
+              );
+            })}
             <button
               className={`chip py-1.5 ${favouritesOnly ? "bg-rose-500/15 text-rose-300 border-rose-500/30" : "bg-surface-800 text-slate-400 border-surface-600"}`}
               onClick={() => setFavouritesOnly(!favouritesOnly)}

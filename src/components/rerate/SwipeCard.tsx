@@ -102,7 +102,9 @@ export default function SwipeCard({
       <div className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-lg font-semibold text-white leading-tight">{entry.name}</h2>
-          <span className={`chip shrink-0 ${STATUS_COLORS[entry.status]}`}>
+          <span
+            className={`chip shrink-0 ${STATUS_COLORS[entry.status].bg} ${STATUS_COLORS[entry.status].text} ${STATUS_COLORS[entry.status].border}`}
+          >
             {STATUS_LABELS[entry.status]}
           </span>
         </div>

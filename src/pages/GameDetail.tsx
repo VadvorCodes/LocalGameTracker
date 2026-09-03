@@ -1,16 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
-import type { CategoryWeights, LibraryEntry, PlayStatus } from "../types";
-import { STATUS_COLORS, STATUS_LABELS } from "../types";
+import type { CategoryWeights, LibraryEntry } from "../types";
+import {
+  CATEGORIES,
+  DEFAULT_WEIGHTS,
+  STATUSES,
+  STATUS_COLORS,
+  STATUS_LABELS,
+  type CategoryKey,
+} from "../types";
 import CoverImage from "../components/CoverImage";
 import { StarPicker, Stars } from "../components/StarRating";
 import { HeartIcon, TrashIcon } from "../components/icons";
 import { divergenceText, formatDate, formatPlaytime, scoreColor } from "../lib/format";
 import { computeWeightedOverall } from "../lib/scoring";
 import { useApp } from "../store";
-
-const STATUSES: PlayStatus[] = ["WantToPlay", "Playing", "Completed", "Dropped"];
 
 // Preset thresholds stored as exact values ("100+" saves 100 h) so sorting and
 // any future filtering keep working on plain minutes. Anything else is Custom.
@@ -22,15 +27,6 @@ function hoursPresetFor(hoursStr: string): string {
   if (h === 0) return "0";
   return (HOUR_PRESETS as readonly number[]).includes(h) ? String(h) : HOURS_CUSTOM;
 }
-
-const CATEGORIES = [
-  { key: "gameplay", label: "Gameplay" },
-  { key: "story", label: "Storytelling" },
-  { key: "music", label: "Music" },
-  { key: "technical", label: "Technical Performance" },
-] as const;
-
-type CatKey = (typeof CATEGORIES)[number]["key"];
 
 export default function GameDetail() {
   const { id } = useParams<{ id: string }>();
@@ -45,7 +41,7 @@ export default function GameDetail() {
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [hours, setHours] = useState("0");
   const [hoursPreset, setHoursPreset] = useState("0");
-  const [catDraft, setCatDraft] = useState<Record<CatKey, number | null>>({
+  const [catDraft, setCatDraft] = useState<Record<CategoryKey, number | null>>({
     gameplay: null,
     story: null,
     music: null,
@@ -104,12 +100,7 @@ export default function GameDetail() {
     );
   }
 
-  const weights: CategoryWeights = profile?.categoryWeights ?? {
-    gameplay: 25,
-    story: 25,
-    music: 25,
-    technical: 25,
-  };
+  const weights: CategoryWeights = profile?.categoryWeights ?? DEFAULT_WEIGHTS;
 
   // Dirty = draft differs from what's actually saved, so the Save button
   // reflects reality instead of requiring a unset/re-set dance.
@@ -263,15 +254,22 @@ export default function GameDetail() {
                 Play status
               </h2>
               <div className="flex flex-wrap gap-2">
-                {STATUSES.map((s) => (
-                  <button
-                    key={s}
-                    className={`chip py-1.5 px-3 ${entry.status === s ? STATUS_COLORS[s] : "bg-surface-800 text-slate-400 border-surface-600"}`}
-                    onClick={() => patch({ status: s })}
-                  >
-                    {STATUS_LABELS[s]}
-                  </button>
-                ))}
+                {STATUSES.map((s) => {
+                  const c = STATUS_COLORS[s];
+                  return (
+                    <button
+                      key={s}
+                      className={`chip py-1.5 px-3 ${
+                        entry.status === s
+                          ? `${c.bg} ${c.text} ${c.border}`
+                          : "bg-surface-800 text-slate-400 border-surface-600"
+                      }`}
+                      onClick={() => patch({ status: s })}
+                    >
+                      {STATUS_LABELS[s]}
+                    </button>
+                  );
+                })}
               </div>
             </section>
 

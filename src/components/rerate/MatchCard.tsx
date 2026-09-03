@@ -24,7 +24,9 @@ export default function MatchCard({ entry }: { entry: LibraryEntry }) {
             </span>
           )}
         </div>
-        <span className={`chip ${STATUS_COLORS[entry.status]} !text-[10px]`}>
+        <span
+          className={`chip ${STATUS_COLORS[entry.status].bg} ${STATUS_COLORS[entry.status].text} ${STATUS_COLORS[entry.status].border} !text-[10px]`}
+        >
           {STATUS_LABELS[entry.status]}
         </span>
       </div>

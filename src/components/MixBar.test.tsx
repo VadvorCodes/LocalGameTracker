@@ -76,6 +76,19 @@ describe("MixBar", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it("styles the grip knob with visible theme shades (defined in tailwind.config.js)", () => {
+    const { container } = renderBar();
+    const knob = container.querySelector('[role="slider"] .rounded-full');
+    expect(knob).not.toBeNull();
+    expect(knob).toHaveClass("border-surface-600", "bg-surface-800");
+
+    const ticks = knob!.querySelectorAll("span");
+    expect(ticks).toHaveLength(2); // grip ticks
+    for (const tick of ticks) {
+      expect(tick).toHaveClass("bg-surface-600");
+    }
+  });
+
   it("arrow keys nudge a divider by 1%, Home/End push it to the extremes", () => {
     renderBar();
     const divider = screen.getByRole("slider", { name: DIVIDER_1 });

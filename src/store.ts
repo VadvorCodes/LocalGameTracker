@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import { api } from "./api";
+import { DEFAULT_THEME_ID } from "./lib/themes";
+import { isThemeId } from "./types";
 import type { Profile, UiSettings } from "./types";
 
 const DEFAULT_SETTINGS: UiSettings = {
@@ -43,7 +45,9 @@ export const useApp = create<AppState>((set) => ({
   },
   loadSettings: async () => {
     try {
-      set({ settings: await api.getSettings() });
+      const s = await api.getSettings();
+      // Backend JSON may carry any string (older/newer build) — coerce unknown theme ids to the default.
+      set({ settings: { ...s, theme: isThemeId(s.theme) ? s.theme : DEFAULT_THEME_ID } });
     } catch {
       /* keep defaults */
     }

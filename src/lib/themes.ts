@@ -4,26 +4,39 @@
  * into the `surface-*` / `accent-*` Tailwind colours, so switching a theme
  * recolours the whole app.
  */
+import type { CustomThemeColours, ThemeId } from "../types";
+
+/** The eight CSS custom property names every palette must define (see index.css). */
+export type ThemeVarName =
+  | "--surface-950"
+  | "--surface-900"
+  | "--surface-800"
+  | "--surface-700"
+  | "--surface-600"
+  | "--accent-400"
+  | "--accent-500"
+  | "--accent-600";
+
+/** A full palette: "r g b" triplets keyed by CSS variable name. */
+export type ThemeVars = Record<ThemeVarName, string>;
+
 export interface ThemePreset {
-  id: string;
+  id: ThemeId;
   name: string;
-  vars: Record<string, string>;
+  vars: ThemeVars;
 }
 
-export const DEFAULT_THEME_ID = "midnight";
-export const CUSTOM_THEME_ID = "custom";
-
-/** The two colours a user picks for the custom theme; the rest is derived. */
-export interface CustomThemeColours {
-  base: string; // darkest background, #rrggbb
-  accent: string; // mid accent, #rrggbb
-}
+export const DEFAULT_THEME_ID: ThemeId = "midnight";
+export const CUSTOM_THEME_ID: ThemeId = "custom";
 
 export const DEFAULT_CUSTOM_COLOURS: CustomThemeColours = {
   base: "#0b0e14",
   accent: "#5b7cfa",
 };
 
+// Keep the Midnight palette in sync with the :root block in index.css — two
+// sources of truth: index.css seeds the first paint before JS runs, this
+// module (THEMES[0] / applyTheme) takes over at runtime.
 export const THEMES: ThemePreset[] = [
   {
     id: "midnight",
@@ -135,9 +148,9 @@ export function themeSwatches(theme: ThemePreset): string[] {
   ].map((rgb) => `rgb(${rgb})`);
 }
 
-/** A preset variable as a ready-to-use CSS colour string ("r g b" → "rgb(r g b)"). */
-export function cssColor(theme: ThemePreset, varName: keyof ThemePreset["vars"]): string {
-  return `rgb(${theme.vars[varName]})`;
+/** A palette variable as a ready-to-use CSS colour string ("r g b" → "rgb(r g b)"). */
+export function cssColor(vars: ThemeVars, name: ThemeVarName): string {
+  return `rgb(${vars[name]})`;
 }
 
 // --- custom theme colour math -------------------------------------------
@@ -191,7 +204,7 @@ const triplet = (rgb: [number, number, number]) => rgb.join(" ");
  * or mid base — so the four surface tiers always stay distinct. Accent 400/600
  * are lighter/darker accent steps.
  */
-export function buildCustomVars(colours: CustomThemeColours): Record<string, string> {
+export function buildCustomVars(colours: CustomThemeColours): ThemeVars {
   const base = hexToRgb(colours.base);
   const accent = hexToRgb(colours.accent);
   if (!base || !accent) return findTheme(DEFAULT_THEME_ID).vars;
@@ -234,7 +247,7 @@ export function buildCustomVars(colours: CustomThemeColours): Record<string, str
 export function themeVars(
   id: string | null | undefined,
   custom?: CustomThemeColours | null,
-): Record<string, string> {
+): ThemeVars {
   if (id === CUSTOM_THEME_ID && custom) return buildCustomVars(custom);
   return findTheme(id).vars;
 }

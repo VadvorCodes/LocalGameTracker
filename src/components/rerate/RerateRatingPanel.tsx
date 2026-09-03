@@ -2,19 +2,11 @@ import { useState } from "react";
 import { api } from "../../api";
 import { useApp } from "../../store";
 import type { CategoryWeights, LibraryEntry } from "../../types";
+import { CATEGORIES, DEFAULT_WEIGHTS, type CategoryKey } from "../../types";
 import CoverImage from "../CoverImage";
 import { Stars, StarPicker } from "../StarRating";
 import { divergenceText, scoreColor } from "../../lib/format";
 import { computeWeightedOverall } from "../../lib/scoring";
-
-const CATEGORIES = [
-  { key: "gameplay", label: "Gameplay" },
-  { key: "story", label: "Storytelling" },
-  { key: "music", label: "Music" },
-  { key: "technical", label: "Technical Performance" },
-] as const;
-
-type CatKey = (typeof CATEGORIES)[number]["key"];
 
 /**
  * The per-game re-rating editor: star picker + detailed category sliders with
@@ -32,15 +24,10 @@ export default function RerateRatingPanel({
   onSkipped: () => void;
 }) {
   const profile = useApp((s) => s.profile);
-  const weights: CategoryWeights = profile?.categoryWeights ?? {
-    gameplay: 25,
-    story: 25,
-    music: 25,
-    technical: 25,
-  };
+  const weights: CategoryWeights = profile?.categoryWeights ?? DEFAULT_WEIGHTS;
 
   const [starDraft, setStarDraft] = useState<number | null>(entry.starRating);
-  const [catDraft, setCatDraft] = useState<Record<CatKey, number | null>>({
+  const [catDraft, setCatDraft] = useState<Record<CategoryKey, number | null>>({
     gameplay: entry.gameplay,
     story: entry.story,
     music: entry.music,
