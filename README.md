@@ -23,6 +23,7 @@ Built with **Tauri 2** (Rust backend) + **React 18** (TypeScript frontend) + **S
 - 🎯 **Detailed score**: four independent 0–100 category scores — Gameplay, Storytelling, Music, Technical Performance — combined with **user-configurable weights** (default equal). Partial scores renormalize; weights can be changed any time and all stored scores recompute in one transaction.
 - 📊 **Analytics dashboard**: star & score distributions, category radar, genre/platform breakdowns with average scores, highest/lowest rated, monthly rating and category trends, and a **"then vs now"** panel comparing your first-quartile ratings to your most recent ones — designed to show how your taste evolves, not just what it is.
 - 🧠 **Divergence analysis**: surfaces games where your gut rating and detailed score disagree ("loved more than its parts" vs "better than it felt").
+- 🔁 **Re-Rate Mode**: a swipe-based session that cycles a slice of your library (with a cooldown so recent re-rates don't come back), starting each card from the three most genre-similar games you've already rated.
 - 🔌 **Fully offline**: search falls back to the local cache; cover art is downloaded once to a disk cache and served from there forever.
 
 ## Architecture
@@ -30,16 +31,28 @@ Built with **Tauri 2** (Rust backend) + **React 18** (TypeScript frontend) + **S
 ```
 ┌─────────────────────────────────────────────┐
 │  React + TypeScript (Vite, Tailwind, Zustand)│
-│  Search · Library · GameDetail · Dashboard   │
+│  pages/   Search · Library · GameDetail ·    │
+│           Dashboard · RerateMode             │
+│  components/  presentational (+ rerate/)     │
+│  hooks/   shared data-loading plumbing       │
+│  lib/     pure logic (scoring, searchRank,   │
+│           themes, format)                    │
+│  types.ts  domain types + UI constants       │
 └───────────────┬─────────────────────────────┘
                 │ typed IPC (serde ⇄ TS types)
 ┌───────────────┴─────────────────────────────┐
 │  Rust backend (Tauri 2)                     │
-│  commands/  thin IPC handlers               │
-│  rawg.rs    API client + offline fallback   │
-│  cache.rs   search-response cache           │
-│  scoring.rs weighted score engine (tested)  │
-│  db.rs      SQLite + versioned migrations   │
+│  commands/      thin IPC handlers (games,   │
+│                 ratings, rerate, analytics, │
+│                 profile, settings, images)  │
+│  rawg.rs        API client + offline        │
+│                 fallback                    │
+│  game_cache.rs  game-cache table DAO        │
+│  settings.rs    JSON settings file          │
+│  scoring.rs     weighted score engine       │
+│                 (tested)                    │
+│  db.rs          SQLite + versioned          │
+│                 migrations                  │
 └───────────────┬─────────────────────────────┘
                 ▼
          gametracker.db (WAL) + images/ + settings.json
@@ -66,9 +79,16 @@ On first launch: pick a local username, then paste your RAWG key in **Settings**
 ## Testing
 
 ```bash
-cd src-tauri && cargo test    # scoring engine + DB layer
-npm test                      # (vitest, if frontend tests are added)
+cd src-tauri && cargo test    # scoring engine, DB layer, rerate cycle, cache
+npm test                      # frontend: 29 suites / 356 tests (vitest + testing-library)
+npm run format:check          # prettier
 ```
+
+Frontend tests mock the Tauri IPC at two layers: `src/api.test.ts` verifies every wrapper against the raw `invoke` mock, and everything else mocks the typed `src/api` module via the shared factory in `src/test/apiMock.ts`. Domain factories, async helpers and DOM stubs live in `src/test/utils.tsx`.
+
+## Code style
+
+Formatting is enforced by tooling: `cargo fmt` for Rust, `npm run format` (Prettier) for TypeScript/config files. Shared UI vocabulary (statuses, categories, default weights, theme ids) lives in `src/types.ts`; shared data-loading hooks in `src/hooks/`.
 
 ## Privacy
 
