@@ -75,14 +75,17 @@ fn pick_cycle_pool(
     profile_id: i64,
     statuses: &[String],
 ) -> AppResult<Vec<LibraryEntry>> {
-    let mut pool = select_eligible(conn, profile_id, statuses)?;
+    // The tag resets and re-selection must be atomic: a crash mid-cycle-start
+    // must not leave the cooldown cleared without a pool being served.
+    let tx = conn.unchecked_transaction()?;
+    let mut pool = select_eligible(&tx, profile_id, statuses)?;
 
-    if pool.is_empty() && count_in_scope(conn, profile_id, statuses)? > 0 {
+    if pool.is_empty() && count_in_scope(&tx, profile_id, statuses)? > 0 {
         // Everything in scope is sitting out the cooldown. Reset the tags and
         // start a fresh cycle anyway — tags only ever clear when a cycle
         // starts, so without this a small library could never cycle again.
-        conn.execute("DELETE FROM rerate_tag", [])?;
-        pool = select_eligible(conn, profile_id, statuses)?;
+        tx.execute("DELETE FROM rerate_tag", [])?;
+        pool = select_eligible(&tx, profile_id, statuses)?;
     }
 
     if pool.is_empty() {
@@ -93,10 +96,11 @@ fn pick_cycle_pool(
     // The cycle is really starting: the previous cycle's tags have served
     // their purpose (exactly one cycle of exclusion) — clear them so those
     // games become eligible again after this one.
-    conn.execute("DELETE FROM rerate_tag", [])?;
+    tx.execute("DELETE FROM rerate_tag", [])?;
 
     let pool_size = pool_size_for(pool.len());
     pool.truncate(pool_size);
+    tx.commit()?;
     Ok(pool)
 }
 
@@ -122,13 +126,9 @@ fn count_in_scope(conn: &Connection, profile_id: i64, statuses: &[String]) -> Ap
     let sql = format!(
         "SELECT COUNT(*) FROM library_entry WHERE profile_id = ?1 AND status IN ({placeholders})"
     );
-    let mut args: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(profile_id)];
-    for s in statuses {
-        args.push(Box::new(s.clone()));
-    }
+    let args: crate::db::Binds = scope_binds(profile_id, statuses);
     let mut stmt = conn.prepare(&sql)?;
-    let refs: Vec<&dyn rusqlite::types::ToSql> = args.iter().map(|b| b.as_ref()).collect();
-    Ok(stmt.query_row(refs.as_slice(), |r| r.get(0))?)
+    Ok(stmt.query_row(crate::db::bind_refs(&args).as_slice(), |r| r.get(0))?)
 }
 
 fn query_entries(
@@ -137,14 +137,23 @@ fn query_entries(
     profile_id: i64,
     statuses: &[String],
 ) -> AppResult<Vec<LibraryEntry>> {
-    let mut args: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(profile_id)];
+    let args: crate::db::Binds = scope_binds(profile_id, statuses);
+    let mut stmt = conn.prepare(sql)?;
+    let rows = stmt.query_map(
+        crate::db::bind_refs(&args).as_slice(),
+        super::games::map_entry,
+    )?;
+    Ok(rows.filter_map(|x| x.ok()).collect())
+}
+
+/// Bind list shared by the scope queries: profile id first, then the statuses.
+fn scope_binds(profile_id: i64, statuses: &[String]) -> crate::db::Binds {
+    let mut args: crate::db::Binds = Vec::with_capacity(1 + statuses.len());
+    args.push(Box::new(profile_id));
     for s in statuses {
         args.push(Box::new(s.clone()));
     }
-    let mut stmt = conn.prepare(sql)?;
-    let refs: Vec<&dyn rusqlite::types::ToSql> = args.iter().map(|b| b.as_ref()).collect();
-    let rows = stmt.query_map(refs.as_slice(), super::games::map_entry)?;
-    Ok(rows.filter_map(|x| x.ok()).collect())
+    args
 }
 
 fn tag_rerated(conn: &Connection, entry_id: i64) -> AppResult<()> {
@@ -206,7 +215,7 @@ fn closest_by_genre(
             Some((shared as f64 / union as f64, e))
         })
         .collect();
-    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+    scored.sort_by(|a, b| b.0.total_cmp(&a.0));
     scored
         .into_iter()
         .map(|(_, e)| e.clone())

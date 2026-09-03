@@ -1,10 +1,10 @@
 // Prevents an additional console window on Windows in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod cache;
 mod commands;
 mod db;
 mod error;
+mod game_cache;
 mod models;
 mod rawg;
 mod scoring;
@@ -14,10 +14,10 @@ use std::sync::Mutex;
 
 use tauri::Manager;
 
-pub struct AppState {
-    pub db: Mutex<rusqlite::Connection>,
-    pub rawg: rawg::RawgClient,
-    pub settings: Mutex<settings::Settings>,
+struct AppState {
+    db: Mutex<rusqlite::Connection>,
+    rawg: rawg::RawgClient,
+    settings: Mutex<settings::Settings>,
 }
 
 fn main() {
@@ -56,12 +56,12 @@ fn main() {
             commands::rerate::start_rerate_session,
             commands::rerate::mark_rerated,
             commands::analytics::get_analytics,
-            commands::settings_cmd::get_api_key,
-            commands::settings_cmd::set_api_key,
-            commands::settings_cmd::get_settings,
-            commands::settings_cmd::set_theme,
-            commands::settings_cmd::set_custom_theme,
-            commands::settings_cmd::set_extended_sorting,
+            commands::settings::get_api_key,
+            commands::settings::set_api_key,
+            commands::settings::get_settings,
+            commands::settings::set_theme,
+            commands::settings::set_custom_theme,
+            commands::settings::set_extended_sorting,
             commands::images::cache_image,
         ])
         .run(tauri::generate_context!())

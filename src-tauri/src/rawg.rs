@@ -8,7 +8,6 @@ use crate::models::CachedGame;
 
 #[derive(Debug, Deserialize)]
 pub struct RawgSearchResponse {
-    pub count: u64,
     pub results: Vec<RawgGame>,
 }
 
@@ -56,8 +55,9 @@ impl RawgClient {
         self.api_key.read().unwrap().is_some()
     }
 
-    /// Search RAWG. Returns AppError::Msg("offline: ...") style errors so the
-    /// caller can fall back to the local cache.
+    /// Search RAWG. Errors are app-level messages ("no-api-key" when no key is
+    /// configured, "rawg-http-{status}" for non-2xx responses) or network
+    /// errors; the caller falls back to the local cache on any of them.
     pub async fn search(
         &self,
         query: &str,
@@ -86,6 +86,10 @@ impl RawgClient {
     }
 }
 
+/// Results fetched per RAWG search page. The offline cache fallback in
+/// commands/games.rs returns the same amount.
+const PAGE_SIZE: u32 = 40;
+
 /// Query params for the /games search endpoint. The RAWG `dates` range uses
 /// sentinel bounds so an open-ended year filter still sends a complete range.
 fn build_search_params(
@@ -98,10 +102,11 @@ fn build_search_params(
         ("key".into(), key.into()),
         ("search".into(), query.into()),
         ("page".into(), page.to_string()),
-        ("page_size".into(), "40".into()),
+        ("page_size".into(), PAGE_SIZE.to_string()),
         ("search_precise".into(), "true".into()),
     ];
     if filters.from_year.is_some() || filters.to_year.is_some() {
+        // Sentinels: any open end still forms a valid complete date range.
         let from = filters.from_year.unwrap_or(1970);
         let to = filters.to_year.unwrap_or(2035);
         params.push(("dates".into(), format!("{from}-01-01,{to}-12-31")));

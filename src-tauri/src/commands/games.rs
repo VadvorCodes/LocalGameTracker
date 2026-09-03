@@ -1,10 +1,15 @@
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
-use crate::cache;
+use crate::db::{bind_refs, Binds};
 use crate::error::{AppError, AppResult};
+use crate::game_cache;
 use crate::models::{CachedGame, LibraryEntry, LibraryQuery, PlayStatus};
 use crate::AppState;
+
+/// Offline fallback returns at most one search page worth of cached games,
+/// mirroring the live RAWG page size (rawg::PAGE_SIZE).
+const OFFLINE_SEARCH_LIMIT: u32 = 40;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -38,7 +43,7 @@ pub async fn search_games(
         Ok(resp) => {
             let games: Vec<CachedGame> = resp.results.iter().map(CachedGame::from).collect();
             let conn = state.db.lock().unwrap();
-            cache::upsert_games(&conn, &resp.results)?;
+            game_cache::upsert_games(&conn, &resp.results)?;
             Ok(SearchOutcome {
                 games,
                 source: "live".into(),
@@ -46,8 +51,13 @@ pub async fn search_games(
         }
         Err(_) => {
             let conn = state.db.lock().unwrap();
-            let games =
-                cache::search_cached(&conn, &query, filters.from_year, filters.to_year, 40)?;
+            let games = game_cache::search_cached(
+                &conn,
+                &query,
+                filters.from_year,
+                filters.to_year,
+                OFFLINE_SEARCH_LIMIT,
+            )?;
             Ok(SearchOutcome {
                 games,
                 source: "cache".into(),
@@ -67,8 +77,11 @@ pub async fn add_to_library(
     let profile =
         super::profile::read_profile(&conn)?.ok_or_else(|| AppError::msg("no profile"))?;
 
-    // The game must exist in the cache; upsert a minimal row if somehow missing.
-    let exists: bool = conn
+    let tx = conn.unchecked_transaction()?;
+    // The game must exist in the cache; cache it from the flattened UI data if
+    // somehow missing (its raw_json keeps the popularity fields for offline
+    // ranking). Rows already cached by a live search are left untouched.
+    let exists: bool = tx
         .query_row(
             "SELECT 1 FROM game_cache WHERE rawg_id = ?1",
             params![game.rawg_id],
@@ -76,32 +89,22 @@ pub async fn add_to_library(
         )
         .unwrap_or(false);
     if !exists {
-        conn.execute(
-            "INSERT INTO game_cache (rawg_id, name, cover_url, genres, platforms, release_date, developer, raw_json)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '{}')",
-            params![
-                game.rawg_id,
-                game.name,
-                game.cover_url,
-                serde_json::to_string(&game.genres)?,
-                serde_json::to_string(&game.platforms)?,
-                game.release_date,
-                game.developer,
-            ],
-        )?;
+        game_cache::upsert_cached(&tx, std::slice::from_ref(&game))?;
     }
 
-    conn.execute(
+    tx.execute(
         "INSERT INTO library_entry (profile_id, rawg_id, status) VALUES (?1, ?2, ?3)
          ON CONFLICT(profile_id, rawg_id) DO NOTHING",
         params![profile.id, game.rawg_id, status.as_str()],
     )?;
-    let entry_id: i64 = conn.query_row(
+    let entry_id: i64 = tx.query_row(
         "SELECT id FROM library_entry WHERE profile_id = ?1 AND rawg_id = ?2",
         params![profile.id, game.rawg_id],
         |r| r.get(0),
     )?;
-    get_entry(&conn, entry_id).ok_or_else(|| AppError::msg("entry not found after insert"))
+    tx.commit()?;
+
+    get_entry(&conn, entry_id)?.ok_or_else(|| AppError::msg("entry not found after insert"))
 }
 
 #[derive(Deserialize, Default)]
@@ -115,6 +118,15 @@ pub struct EntryPatch {
     pub notes: Option<String>,
 }
 
+/// Merge a date patch into the stored value: empty string clears, None keeps.
+fn merge_date(patch: Option<&str>, current: Option<String>) -> Option<String> {
+    match patch {
+        Some("") => None,
+        Some(d) => Some(d.to_string()),
+        None => current,
+    }
+}
+
 #[tauri::command]
 pub fn update_library_entry(
     state: tauri::State<AppState>,
@@ -122,25 +134,20 @@ pub fn update_library_entry(
     patch: EntryPatch,
 ) -> AppResult<LibraryEntry> {
     let conn = state.db.lock().unwrap();
+    let tx = conn.unchecked_transaction()?;
+    // Fail before writing anything when the entry is missing.
+    if get_entry(&tx, entry_id)?.is_none() {
+        return Err(AppError::msg("entry not found"));
+    }
     // Validate the merged date range before applying anything: string compare
     // is safe because both values are ISO YYYY-MM-DD.
-    let (cur_started, cur_finished): (Option<String>, Option<String>) = conn.query_row(
+    let (cur_started, cur_finished): (Option<String>, Option<String>) = tx.query_row(
         "SELECT started_at, finished_at FROM library_entry WHERE id = ?1",
         params![entry_id],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?;
-    let merged_started = patch
-        .started_at
-        .clone()
-        .map(|s| if s.is_empty() { None } else { Some(s) })
-        .or(Some(cur_started))
-        .flatten();
-    let merged_finished = patch
-        .finished_at
-        .clone()
-        .map(|f| if f.is_empty() { None } else { Some(f) })
-        .or(Some(cur_finished))
-        .flatten();
+    let merged_started = merge_date(patch.started_at.as_deref(), cur_started);
+    let merged_finished = merge_date(patch.finished_at.as_deref(), cur_finished);
     if let (Some(s), Some(f)) = (&merged_started, &merged_finished) {
         if s > f {
             return Err(AppError::msg(
@@ -150,13 +157,13 @@ pub fn update_library_entry(
     }
     if let Some(s) = &patch.status {
         PlayStatus::from_str(s).ok_or_else(|| AppError::msg("invalid status"))?;
-        conn.execute(
+        tx.execute(
             "UPDATE library_entry SET status = ?1 WHERE id = ?2",
             params![s, entry_id],
         )?;
     }
     if let Some(f) = patch.favourite {
-        conn.execute(
+        tx.execute(
             "UPDATE library_entry SET favourite = ?1 WHERE id = ?2",
             params![f as i64, entry_id],
         )?;
@@ -165,46 +172,42 @@ pub fn update_library_entry(
         if p < 0 {
             return Err(AppError::msg("playtime cannot be negative"));
         }
-        conn.execute(
+        tx.execute(
             "UPDATE library_entry SET playtime_minutes = ?1 WHERE id = ?2",
             params![p, entry_id],
         )?;
     }
     if let Some(d) = &patch.started_at {
-        conn.execute(
+        tx.execute(
             "UPDATE library_entry SET started_at = NULLIF(?1, '') WHERE id = ?2",
             params![d, entry_id],
         )?;
     }
     if let Some(d) = &patch.finished_at {
-        conn.execute(
+        tx.execute(
             "UPDATE library_entry SET finished_at = NULLIF(?1, '') WHERE id = ?2",
             params![d, entry_id],
         )?;
     }
     if let Some(n) = &patch.notes {
-        conn.execute(
+        tx.execute(
             "UPDATE library_entry SET notes = ?1 WHERE id = ?2",
             params![n, entry_id],
         )?;
     }
-    let changed = conn.execute(
+    tx.execute(
         "UPDATE library_entry SET updated_at = datetime('now') WHERE id = ?1",
         params![entry_id],
     )?;
-    if changed == 0 {
-        return Err(AppError::msg("entry not found"));
-    }
-    get_entry(&conn, entry_id).ok_or_else(|| AppError::msg("entry not found"))
+    tx.commit()?;
+
+    get_entry(&conn, entry_id)?.ok_or_else(|| AppError::msg("entry not found"))
 }
 
 #[tauri::command]
 pub fn remove_from_library(state: tauri::State<AppState>, entry_id: i64) -> AppResult<()> {
     let conn = state.db.lock().unwrap();
-    conn.execute(
-        "DELETE FROM rating WHERE library_entry_id = ?1",
-        params![entry_id],
-    )?;
+    // Rating and re-rate-tag rows follow via FK ON DELETE CASCADE.
     conn.execute("DELETE FROM library_entry WHERE id = ?1", params![entry_id])?;
     Ok(())
 }
@@ -212,7 +215,7 @@ pub fn remove_from_library(state: tauri::State<AppState>, entry_id: i64) -> AppR
 #[tauri::command]
 pub fn get_library_entry(state: tauri::State<AppState>, entry_id: i64) -> AppResult<LibraryEntry> {
     let conn = state.db.lock().unwrap();
-    get_entry(&conn, entry_id).ok_or_else(|| AppError::msg("entry not found"))
+    get_entry(&conn, entry_id)?.ok_or_else(|| AppError::msg("entry not found"))
 }
 
 const SORTS: &[(&str, &str)] = &[
@@ -251,7 +254,7 @@ pub fn library_query(
 
     let mut sql = String::from(ENTRY_FROM);
     sql.push_str(" WHERE e.profile_id = ?1");
-    let mut args: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(profile.id)];
+    let mut args: Binds = vec![Box::new(profile.id)];
 
     if let Some(s) = query
         .search
@@ -260,7 +263,7 @@ pub fn library_query(
         .filter(|s| !s.is_empty())
     {
         sql.push_str(" AND c.name LIKE ?");
-        args.push(Box::new(format!("%{}%", s)));
+        args.push(Box::new(format!("%{}%", game_cache::escape_like(s))));
     }
     if !query.statuses.is_empty() {
         sql.push_str(&format!(
@@ -286,7 +289,7 @@ pub fn library_query(
             let mut parts = vec![];
             for v in values {
                 parts.push(format!("c.{col} LIKE ?"));
-                args.push(Box::new(format!("%\"{}\"%", v.replace('%', ""))));
+                args.push(Box::new(format!("%\"{}\"%", game_cache::escape_like(v))));
             }
             sql.push_str(&format!(" AND ({})", parts.join(" OR ")));
         }
@@ -324,8 +327,7 @@ pub fn library_query(
 
     let full = format!("{ENTRY_SELECT} {sql}");
     let mut stmt = conn.prepare(&full)?;
-    let refs: Vec<&dyn rusqlite::types::ToSql> = args.iter().map(|b| b.as_ref()).collect();
-    let rows = stmt.query_map(refs.as_slice(), map_entry)?;
+    let rows = stmt.query_map(bind_refs(&args).as_slice(), map_entry)?;
     Ok(rows.filter_map(|x| x.ok()).collect())
 }
 
@@ -364,13 +366,20 @@ pub fn get_genres_and_platforms(state: tauri::State<AppState>) -> AppResult<Genr
     })
 }
 
-pub(crate) fn get_entry(conn: &rusqlite::Connection, entry_id: i64) -> Option<LibraryEntry> {
-    conn.query_row(
+/// Fetch one library entry; `Ok(None)` when the id does not exist.
+pub(crate) fn get_entry(
+    conn: &rusqlite::Connection,
+    entry_id: i64,
+) -> AppResult<Option<LibraryEntry>> {
+    match conn.query_row(
         &format!("{ENTRY_SELECT} {ENTRY_FROM} WHERE e.id = ?1"),
         params![entry_id],
         map_entry,
-    )
-    .ok()
+    ) {
+        Ok(entry) => Ok(Some(entry)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e.into()),
+    }
 }
 
 /// The profile's full library in random order (callers that need stable order
@@ -413,4 +422,30 @@ pub(crate) fn map_entry(r: &rusqlite::Row) -> rusqlite::Result<LibraryEntry> {
         rated_at: r.get(22)?,
         rerated_at: r.get(23)?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_entry_missing_is_ok_none_not_swallowed_error() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        crate::db::migrate(&conn).unwrap();
+        assert!(matches!(get_entry(&conn, 42), Ok(None)));
+    }
+
+    #[test]
+    fn merge_date_patches() {
+        // None keeps the stored value, empty clears, a value replaces.
+        assert_eq!(
+            merge_date(None, Some("2020-01-01".into())),
+            Some("2020-01-01".into())
+        );
+        assert_eq!(merge_date(Some(""), Some("2020-01-01".into())), None);
+        assert_eq!(
+            merge_date(Some("2021-05-05"), Some("2020-01-01".into())),
+            Some("2021-05-05".into())
+        );
+    }
 }

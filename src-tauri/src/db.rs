@@ -3,6 +3,15 @@ use std::path::Path;
 
 use crate::error::AppResult;
 
+/// Owned bind parameters for dynamically-built SQL. `rusqlite` binds by
+/// reference, so callers turn these into `&dyn ToSql` slices via [`bind_refs`]
+/// right before executing.
+pub(crate) type Binds = Vec<Box<dyn rusqlite::types::ToSql>>;
+
+pub(crate) fn bind_refs(binds: &Binds) -> Vec<&dyn rusqlite::types::ToSql> {
+    binds.iter().map(|b| b.as_ref()).collect()
+}
+
 const MIGRATIONS: &[&str] = &[
     // v1: initial schema
     "
@@ -94,13 +103,11 @@ pub(crate) fn migrate(conn: &Connection) -> AppResult<()> {
         "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)",
         [],
     )?;
-    let current: i64 = conn
-        .query_row(
-            "SELECT COALESCE(MAX(version), 0) FROM schema_version",
-            [],
-            |r| r.get(0),
-        )
-        .unwrap_or(0);
+    let current: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(version), 0) FROM schema_version",
+        [],
+        |r| r.get(0),
+    )?;
 
     for (i, sql) in MIGRATIONS.iter().enumerate() {
         let v = (i + 1) as i64;

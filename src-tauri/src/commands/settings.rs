@@ -1,4 +1,5 @@
 use serde::Serialize;
+use tauri::Manager;
 
 use crate::error::AppResult;
 use crate::AppState;
@@ -44,15 +45,19 @@ fn validate_hex(value: &str) -> AppResult<String> {
     }
 }
 
-fn persist(app: &tauri::AppHandle, state: &tauri::State<AppState>) -> AppResult<UiSettings> {
-    use tauri::Manager;
+/// Lock the settings, save them to disk, and return the saved snapshot. Every
+/// mutating command funnels through here so disk state always mirrors memory.
+fn persist(
+    app: &tauri::AppHandle,
+    state: &tauri::State<AppState>,
+) -> AppResult<crate::settings::Settings> {
     let path = app.path().app_config_dir()?.join("settings.json");
     let snapshot = {
         let settings = state.settings.lock().unwrap();
         settings.save(&path)?;
         settings.clone()
     };
-    Ok(ui_settings(&snapshot))
+    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -68,9 +73,11 @@ pub async fn set_api_key(
     state: tauri::State<'_, AppState>,
     key: String,
 ) -> AppResult<ApiKeyStatus> {
-    use tauri::Manager;
     let key = key.trim().to_string();
-    // Validate against RAWG before accepting (empty string clears the key).
+    // Validate-then-restore: the candidate key is set on the client first so
+    // the validation request itself authenticates with it; on rejection the
+    // old key is put back so the app keeps working exactly as before, and on
+    // success it is set once more below (as the now-accepted value).
     let old = state.settings.lock().unwrap().rawg_api_key.clone();
     let validated = if key.is_empty() {
         None
@@ -95,9 +102,8 @@ pub async fn set_api_key(
     {
         let mut settings = state.settings.lock().unwrap();
         settings.rawg_api_key = validated;
-        let path = app.path().app_config_dir()?.join("settings.json");
-        settings.save(&path)?;
     }
+    persist(&app, &state)?;
     Ok(ApiKeyStatus {
         has_key: state.rawg.has_key(),
     })
@@ -116,7 +122,7 @@ pub fn set_theme(
     theme: String,
 ) -> AppResult<UiSettings> {
     state.settings.lock().unwrap().theme = Some(theme);
-    persist(&app, &state)
+    persist(&app, &state).map(|s| ui_settings(&s))
 }
 
 #[tauri::command]
@@ -133,7 +139,7 @@ pub fn set_custom_theme(
         settings.theme = Some("custom".into());
         settings.custom_theme = Some(crate::settings::CustomTheme { base, accent });
     }
-    persist(&app, &state)
+    persist(&app, &state).map(|s| ui_settings(&s))
 }
 
 #[tauri::command]
@@ -143,5 +149,5 @@ pub fn set_extended_sorting(
     enabled: bool,
 ) -> AppResult<UiSettings> {
     state.settings.lock().unwrap().extended_sorting = Some(enabled);
-    persist(&app, &state)
+    persist(&app, &state).map(|s| ui_settings(&s))
 }

@@ -2,6 +2,7 @@ use rusqlite::params;
 use serde::Serialize;
 
 use crate::error::{AppError, AppResult};
+use crate::scoring::round1;
 use crate::AppState;
 
 /// One ready-to-plot analytics payload. Every series is computed in SQL/Rust
@@ -111,6 +112,20 @@ pub struct CategoryShift {
     pub recent_quartile: CategoryAverages,
 }
 
+/// Stars-vs-score gap (on the 0-100 scale) that qualifies a game for the
+/// "gut feeling" / "on reflection" panels.
+const DIVERGENCE_THRESHOLD: f64 = 15.0;
+/// Size of the highest/lowest/divergence panels.
+const TOP_N: u32 = 5;
+/// Size of the "recently rated" panel.
+const RECENT_COUNT: u32 = 3;
+/// Stars are bucketed in half-star steps: 0..=10 buckets of 0.5.
+const STAR_BUCKETS: i64 = 10;
+const STAR_STEP_DIVISOR: f64 = 2.0;
+/// Scores are bucketed in fixed 5-point bins across 0..100 (0..20 bins).
+const SCORE_BUCKET_WIDTH: i64 = 5;
+const SCORE_BUCKET_COUNT: i64 = 20;
+
 const JOIN: &str =
     "FROM library_entry e JOIN game_cache c ON c.rawg_id = e.rawg_id LEFT JOIN rating r ON r.library_entry_id = e.id";
 
@@ -120,12 +135,65 @@ pub fn get_analytics(state: tauri::State<AppState>, mode: Option<String>) -> App
     let profile =
         super::profile::read_profile(&conn)?.ok_or_else(|| AppError::msg("no profile"))?;
     let pid = profile.id;
-    let mut a = Analytics::default();
+    let (extreme_cond, extreme_desc, extreme_asc) = extreme_order(mode.as_deref());
 
-    // Which rating drives the highest/lowest panels: "stars" (simple only),
-    // "detailed" (detailed only), or "both" (games must carry both; current
-    // default).
-    let (extreme_cond, extreme_desc, extreme_asc) = match mode.as_deref() {
+    let mut a = Analytics {
+        total_games: conn.query_row(
+            &format!("SELECT COUNT(*) {JOIN} WHERE e.profile_id = ?1"),
+            params![pid],
+            |r| r.get(0),
+        )?,
+        favourites: conn.query_row(
+            &format!("SELECT COUNT(*) {JOIN} WHERE e.profile_id = ?1 AND e.favourite = 1"),
+            params![pid],
+            |r| r.get(0),
+        )?,
+        total_playtime_minutes: conn.query_row(
+            &format!("SELECT COALESCE(SUM(e.playtime_minutes),0) {JOIN} WHERE e.profile_id = ?1"),
+            params![pid],
+            |r| r.get(0),
+        )?,
+        ..Default::default()
+    };
+    a.status_counts = status_counts(&conn, pid)?;
+
+    let avgs = rating_averages(&conn, pid)?;
+    a.avg_stars = avgs.avg_stars;
+    a.avg_overall = avgs.avg_overall;
+    a.category_averages = avgs.categories;
+    a.star_distribution = star_distribution(&conn, pid)?;
+    a.score_distribution = score_distribution(&conn, pid)?;
+
+    a.genre_breakdown = breakdown(&conn, pid, "c.genres")?;
+    a.platform_breakdown = breakdown(&conn, pid, "c.platforms")?;
+
+    a.highest_rated = top_entries(&conn, pid, extreme_cond, extreme_desc, TOP_N)?;
+    a.lowest_rated = top_entries(&conn, pid, extreme_cond, extreme_asc, TOP_N)?;
+    a.recently_rated = top_entries(
+        &conn,
+        pid,
+        "r.rated_at IS NOT NULL",
+        "r.rated_at DESC",
+        RECENT_COUNT,
+    )?;
+
+    a.rating_trend = rating_trend(&conn, pid)?;
+    a.category_trend = category_trend(&conn, pid)?;
+    a.first_vs_recent = first_vs_recent(&conn, pid)?;
+
+    a.gut_feeling_games = divergent(&conn, pid, true)?;
+    a.on_reflection_games = divergent(&conn, pid, false)?;
+
+    Ok(a)
+}
+
+/// Which rating drives the highest/lowest panels: "stars" (simple only),
+/// "detailed" (detailed only), or "both" (games must carry both; current
+/// default). Returns (condition, desc order, asc order).
+type ExtremeOrder = (&'static str, &'static str, &'static str);
+
+fn extreme_order(mode: Option<&str>) -> ExtremeOrder {
+    match mode {
         Some("stars") => (
             "r.star_rating IS NOT NULL",
             "r.star_rating DESC",
@@ -141,50 +209,42 @@ pub fn get_analytics(state: tauri::State<AppState>, mode: Option<String>) -> App
             "r.computed_overall DESC",
             "r.computed_overall ASC",
         ),
-    };
-
-    a.total_games = conn.query_row(
-        &format!("SELECT COUNT(*) {JOIN} WHERE e.profile_id = ?1"),
-        params![pid],
-        |r| r.get(0),
-    )?;
-
-    // status counts
-    {
-        let mut stmt = conn.prepare(&format!(
-            "SELECT e.status, COUNT(*) {JOIN} WHERE e.profile_id = ?1 GROUP BY e.status"
-        ))?;
-        let it = stmt.query_map(params![pid], |r| {
-            Ok(StatusCount {
-                status: r.get(0)?,
-                count: r.get(1)?,
-            })
-        })?;
-        a.status_counts = it.flatten().collect();
     }
-    a.favourites = conn.query_row(
-        &format!("SELECT COUNT(*) {JOIN} WHERE e.profile_id = ?1 AND e.favourite = 1"),
-        params![pid],
-        |r| r.get(0),
-    )?;
-    a.total_playtime_minutes = conn.query_row(
-        &format!("SELECT COALESCE(SUM(e.playtime_minutes),0) {JOIN} WHERE e.profile_id = ?1"),
-        params![pid],
-        |r| r.get(0),
-    )?;
+}
 
-    // rating aggregates (over entries that have the relevant rating)
-    a.avg_stars = conn.query_row(
+fn status_counts(conn: &rusqlite::Connection, pid: i64) -> AppResult<Vec<StatusCount>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT e.status, COUNT(*) {JOIN} WHERE e.profile_id = ?1 GROUP BY e.status"
+    ))?;
+    let it = stmt.query_map(params![pid], |r| {
+        Ok(StatusCount {
+            status: r.get(0)?,
+            count: r.get(1)?,
+        })
+    })?;
+    Ok(it.flatten().collect())
+}
+
+struct RatingAverages {
+    avg_stars: Option<f64>,
+    avg_overall: Option<f64>,
+    categories: CategoryAverages,
+}
+
+/// Averages over the entries that carry the relevant rating.
+fn rating_averages(conn: &rusqlite::Connection, pid: i64) -> AppResult<RatingAverages> {
+    let avg_stars = conn.query_row(
         &format!("SELECT AVG(r.star_rating) {JOIN} WHERE e.profile_id = ?1 AND r.star_rating IS NOT NULL"),
         params![pid], |r| r.get(0))?;
-    a.avg_overall = conn.query_row(
+    let avg_overall = conn.query_row(
         &format!("SELECT AVG(r.computed_overall) {JOIN} WHERE e.profile_id = ?1 AND r.computed_overall IS NOT NULL"),
         params![pid], |r| r.get(0))?;
+    let mut categories = CategoryAverages::default();
     for (col, slot) in [
-        ("r.gameplay", &mut a.category_averages.gameplay),
-        ("r.story", &mut a.category_averages.story),
-        ("r.music", &mut a.category_averages.music),
-        ("r.technical", &mut a.category_averages.technical),
+        ("r.gameplay", &mut categories.gameplay),
+        ("r.story", &mut categories.story),
+        ("r.music", &mut categories.music),
+        ("r.technical", &mut categories.technical),
     ] {
         *slot = conn.query_row(
             &format!("SELECT AVG({col}) {JOIN} WHERE e.profile_id = ?1 AND {col} IS NOT NULL"),
@@ -192,144 +252,154 @@ pub fn get_analytics(state: tauri::State<AppState>, mode: Option<String>) -> App
             |r| r.get(0),
         )?;
     }
+    Ok(RatingAverages {
+        avg_stars,
+        avg_overall,
+        categories,
+    })
+}
 
-    // distributions
-    {
-        let mut stmt = conn.prepare(&format!(
-            "SELECT CAST(ROUND(r.star_rating * 2) AS INTEGER) AS bucket, COUNT(*) {JOIN}
-             WHERE e.profile_id = ?1 AND r.star_rating IS NOT NULL GROUP BY bucket ORDER BY bucket"
-        ))?;
-        let it = stmt.query_map(params![pid], |r| {
-            Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))
-        })?;
-        let map: std::collections::BTreeMap<i64, i64> = it.flatten().collect();
-        a.star_distribution = (0..=10)
-            .map(|i| Countpoint {
-                x: i as f64 / 2.0,
-                y: *map.get(&i).unwrap_or(&0),
-            })
-            .collect();
-    }
-    {
-        let mut stmt = conn.prepare(&format!(
-            "SELECT CAST(r.computed_overall / 5 AS INTEGER) * 5 AS bucket, COUNT(*) {JOIN}
-             WHERE e.profile_id = ?1 AND r.computed_overall IS NOT NULL GROUP BY bucket ORDER BY bucket"
-        ))?;
-        let it = stmt.query_map(params![pid], |r| {
-            Ok(Countpoint {
-                x: r.get::<_, i64>(0)? as f64,
-                y: r.get(1)?,
-            })
-        })?;
-        let map: std::collections::BTreeMap<i64, i64> =
-            it.flatten().map(|p| (p.x as i64, p.y)).collect();
-        a.score_distribution = (0..20)
-            .map(|i| Countpoint {
-                x: (i * 5) as f64,
-                y: *map.get(&(i * 5)).unwrap_or(&0),
-            })
-            .collect();
-    }
+fn star_distribution(conn: &rusqlite::Connection, pid: i64) -> AppResult<Vec<Countpoint>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT CAST(ROUND(r.star_rating * 2) AS INTEGER) AS bucket, COUNT(*) {JOIN}
+         WHERE e.profile_id = ?1 AND r.star_rating IS NOT NULL GROUP BY bucket ORDER BY bucket"
+    ))?;
+    let it = stmt.query_map(params![pid], |r| {
+        Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))
+    })?;
+    let map: std::collections::BTreeMap<i64, i64> = it.flatten().collect();
+    Ok((0..=STAR_BUCKETS)
+        .map(|i| Countpoint {
+            x: i as f64 / STAR_STEP_DIVISOR,
+            y: *map.get(&i).unwrap_or(&0),
+        })
+        .collect())
+}
 
-    // genre & platform breakdowns (JSON arrays in cache -> LIKE extraction)
-    a.genre_breakdown = breakdown(&conn, pid, "c.genres")?;
-    a.platform_breakdown = breakdown(&conn, pid, "c.platforms")?;
+fn score_distribution(conn: &rusqlite::Connection, pid: i64) -> AppResult<Vec<Countpoint>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT CAST(r.computed_overall / 5 AS INTEGER) * 5 AS bucket, COUNT(*) {JOIN}
+         WHERE e.profile_id = ?1 AND r.computed_overall IS NOT NULL GROUP BY bucket ORDER BY bucket"
+    ))?;
+    let it = stmt.query_map(params![pid], |r| {
+        Ok(Countpoint {
+            x: r.get::<_, i64>(0)? as f64,
+            y: r.get(1)?,
+        })
+    })?;
+    let map: std::collections::BTreeMap<i64, i64> =
+        it.flatten().map(|p| (p.x as i64, p.y)).collect();
+    Ok((0..SCORE_BUCKET_COUNT)
+        .map(|i| {
+            let low = i * SCORE_BUCKET_WIDTH;
+            Countpoint {
+                x: low as f64,
+                y: *map.get(&low).unwrap_or(&0),
+            }
+        })
+        .collect())
+}
 
-    // extremes
-    a.highest_rated = top_entries(&conn, pid, extreme_cond, extreme_desc, 5)?;
-    a.lowest_rated = top_entries(&conn, pid, extreme_cond, extreme_asc, 5)?;
+fn rating_trend(conn: &rusqlite::Connection, pid: i64) -> AppResult<Vec<Trendpoint>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT strftime('%Y-%m', r.rated_at) m,
+                AVG(r.computed_overall), AVG(r.star_rating), COUNT(*)
+         {JOIN} WHERE e.profile_id = ?1 AND r.rated_at IS NOT NULL
+         GROUP BY m ORDER BY m"
+    ))?;
+    let it = stmt.query_map(params![pid], |r| {
+        Ok(Trendpoint {
+            month: r.get(0)?,
+            avg_overall: r.get(1)?,
+            avg_stars: r.get(2)?,
+            count: r.get(3)?,
+        })
+    })?;
+    Ok(it.flatten().collect())
+}
 
-    // recently rated
-    a.recently_rated = top_entries(&conn, pid, "r.rated_at IS NOT NULL", "r.rated_at DESC", 3)?;
+fn category_trend(conn: &rusqlite::Connection, pid: i64) -> AppResult<Vec<CategoryTrendpoint>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT strftime('%Y-%m', r.rated_at) m,
+                AVG(r.gameplay), AVG(r.story), AVG(r.music), AVG(r.technical)
+         {JOIN} WHERE e.profile_id = ?1 AND r.rated_at IS NOT NULL
+         GROUP BY m ORDER BY m"
+    ))?;
+    let it = stmt.query_map(params![pid], |r| {
+        Ok(CategoryTrendpoint {
+            month: r.get(0)?,
+            gameplay: r.get(1)?,
+            story: r.get(2)?,
+            music: r.get(3)?,
+            technical: r.get(4)?,
+        })
+    })?;
+    Ok(it.flatten().collect())
+}
 
-    // trends by month
-    {
-        let mut stmt = conn.prepare(&format!(
-            "SELECT strftime('%Y-%m', r.rated_at) m,
-                    AVG(r.computed_overall), AVG(r.star_rating), COUNT(*)
+/// First vs most recent quartile of the rating history.
+fn first_vs_recent(conn: &rusqlite::Connection, pid: i64) -> AppResult<Option<CategoryShift>> {
+    let mut stmt = conn.prepare(&format!(
+        "WITH ranked AS (
+             SELECT r.*, ROW_NUMBER() OVER (ORDER BY r.rated_at, r.library_entry_id) AS rn,
+                    COUNT(*) OVER () AS total
              {JOIN} WHERE e.profile_id = ?1 AND r.rated_at IS NOT NULL
-             GROUP BY m ORDER BY m"
-        ))?;
-        let it = stmt.query_map(params![pid], |r| {
-            Ok(Trendpoint {
-                month: r.get(0)?,
-                avg_overall: r.get(1)?,
-                avg_stars: r.get(2)?,
-                count: r.get(3)?,
-            })
-        })?;
-        a.rating_trend = it.flatten().collect();
-    }
-    {
-        let mut stmt = conn.prepare(&format!(
-            "SELECT strftime('%Y-%m', r.rated_at) m,
-                    AVG(r.gameplay), AVG(r.story), AVG(r.music), AVG(r.technical)
-             {JOIN} WHERE e.profile_id = ?1 AND r.rated_at IS NOT NULL
-             GROUP BY m ORDER BY m"
-        ))?;
-        let it = stmt.query_map(params![pid], |r| {
-            Ok(CategoryTrendpoint {
-                month: r.get(0)?,
+         )
+         SELECT CASE WHEN rn <= total / 4.0 THEN 'first' ELSE 'recent' END half,
+                AVG(gameplay), AVG(story), AVG(music), AVG(technical)
+         FROM ranked
+         WHERE rn <= total / 4.0 OR rn > total * 0.75
+         GROUP BY half"
+    ))?;
+    let it = stmt.query_map(params![pid], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            CategoryAverages {
                 gameplay: r.get(1)?,
                 story: r.get(2)?,
                 music: r.get(3)?,
                 technical: r.get(4)?,
-            })
-        })?;
-        a.category_trend = it.flatten().collect();
-    }
-
-    // first vs most recent quartile of rating history
-    {
-        let mut stmt = conn.prepare(&format!(
-            "WITH ranked AS (
-                 SELECT r.*, ROW_NUMBER() OVER (ORDER BY r.rated_at, r.library_entry_id) AS rn,
-                        COUNT(*) OVER () AS total
-                 {JOIN} WHERE e.profile_id = ?1 AND r.rated_at IS NOT NULL
-             )
-             SELECT CASE WHEN rn <= total / 4.0 THEN 'first' ELSE 'recent' END half,
-                    AVG(gameplay), AVG(story), AVG(music), AVG(technical)
-             FROM ranked
-             WHERE rn <= total / 4.0 OR rn > total * 0.75
-             GROUP BY half"
-        ))?;
-        let it = stmt.query_map(params![pid], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                CategoryAverages {
-                    gameplay: r.get(1)?,
-                    story: r.get(2)?,
-                    music: r.get(3)?,
-                    technical: r.get(4)?,
-                },
-            ))
-        })?;
-        let mut first = None;
-        let mut recent = None;
-        for (half, avgs) in it.flatten() {
-            match half.as_str() {
-                "first" => first = Some(avgs),
-                _ => recent = Some(avgs),
-            }
+            },
+        ))
+    })?;
+    let mut first = None;
+    let mut recent = None;
+    for (half, avgs) in it.flatten() {
+        match half.as_str() {
+            "first" => first = Some(avgs),
+            _ => recent = Some(avgs),
         }
-        a.first_vs_recent = match (first, recent) {
-            (Some(f), Some(rc)) => Some(CategoryShift {
-                first_quartile: f,
-                recent_quartile: rc,
-            }),
-            _ => None,
-        };
     }
+    Ok(match (first, recent) {
+        (Some(f), Some(rc)) => Some(CategoryShift {
+            first_quartile: f,
+            recent_quartile: rc,
+        }),
+        _ => None,
+    })
+}
 
-    // divergence: stars (0-5 -> 0-100) vs detailed score
-    a.gut_feeling_games = top_entries(&conn, pid,
-        "r.star_rating IS NOT NULL AND r.computed_overall IS NOT NULL AND r.star_rating * 20 - r.computed_overall >= 15",
-        "(r.star_rating * 20 - r.computed_overall) DESC", 5)?;
-    a.on_reflection_games = top_entries(&conn, pid,
-        "r.star_rating IS NOT NULL AND r.computed_overall IS NOT NULL AND r.computed_overall - r.star_rating * 20 >= 15",
-        "(r.computed_overall - r.star_rating * 20) DESC", 5)?;
-
-    Ok(a)
+/// Games whose stars (0-5 -> 0-100) and detailed score disagree by at least
+/// DIVERGENCE_THRESHOLD. `gut_feeling` selects stars-over-score; otherwise
+/// score-over-stars.
+fn divergent(
+    conn: &rusqlite::Connection,
+    pid: i64,
+    gut_feeling: bool,
+) -> AppResult<Vec<MiniEntry>> {
+    let both_rated = "r.star_rating IS NOT NULL AND r.computed_overall IS NOT NULL";
+    let (cond, order) = if gut_feeling {
+        (
+            format!("{both_rated} AND r.star_rating * 20 - r.computed_overall >= {DIVERGENCE_THRESHOLD}"),
+            "(r.star_rating * 20 - r.computed_overall) DESC",
+        )
+    } else {
+        (
+            format!("{both_rated} AND r.computed_overall - r.star_rating * 20 >= {DIVERGENCE_THRESHOLD}"),
+            "(r.computed_overall - r.star_rating * 20) DESC",
+        )
+    };
+    top_entries(conn, pid, &cond, order, TOP_N)
 }
 
 /// Explode JSON-array columns (genres/platforms) into per-label aggregate rows.
@@ -346,22 +416,31 @@ fn breakdown(conn: &rusqlite::Connection, pid: i64, col: &str) -> AppResult<Vec<
             r.get::<_, i64>(3)?,
         ))
     })?;
-    let mut acc: std::collections::HashMap<String, (i64, f64, usize, f64, usize, i64)> =
-        std::collections::HashMap::new();
-    // label -> (count, stars_sum, stars_n, overall_sum, overall_n, playtime)
+
+    #[derive(Default)]
+    struct Acc {
+        count: i64,
+        stars_sum: f64,
+        stars_n: usize,
+        overall_sum: f64,
+        overall_n: usize,
+        playtime: i64,
+    }
+
+    let mut acc: std::collections::HashMap<String, Acc> = std::collections::HashMap::new();
     for (json, stars, overall, playtime) in it.flatten() {
         let labels: Vec<String> = serde_json::from_str(&json).unwrap_or_default();
         for label in labels {
-            let e = acc.entry(label).or_insert((0, 0.0, 0, 0.0, 0, 0));
-            e.0 += 1;
-            e.5 += playtime;
+            let e = acc.entry(label).or_default();
+            e.count += 1;
+            e.playtime += playtime;
             if let Some(s) = stars {
-                e.1 += s;
-                e.2 += 1;
+                e.stars_sum += s;
+                e.stars_n += 1;
             }
             if let Some(o) = overall {
-                e.3 += o;
-                e.4 += 1;
+                e.overall_sum += o;
+                e.overall_n += 1;
             }
         }
     }
@@ -369,18 +448,18 @@ fn breakdown(conn: &rusqlite::Connection, pid: i64, col: &str) -> AppResult<Vec<
         .into_iter()
         .map(|(label, v)| Breakdown {
             label,
-            count: v.0,
-            avg_stars: if v.2 > 0 {
-                Some(round1(v.1 / v.2 as f64))
+            count: v.count,
+            avg_stars: if v.stars_n > 0 {
+                Some(round1(v.stars_sum / v.stars_n as f64))
             } else {
                 None
             },
-            avg_overall: if v.4 > 0 {
-                Some(round1(v.3 / v.4 as f64))
+            avg_overall: if v.overall_n > 0 {
+                Some(round1(v.overall_sum / v.overall_n as f64))
             } else {
                 None
             },
-            total_playtime: v.5,
+            total_playtime: v.playtime,
         })
         .collect();
     out.sort_by(|a, b| b.count.cmp(&a.count).then(a.label.cmp(&b.label)));
@@ -410,8 +489,4 @@ fn top_entries(
         })
     })?;
     Ok(it.flatten().collect())
-}
-
-fn round1(v: f64) -> f64 {
-    (v * 10.0).round() / 10.0
 }

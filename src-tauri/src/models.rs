@@ -127,6 +127,6 @@ pub struct LibraryQuery {
     pub max_stars: Option<f64>,
     pub min_score: Option<f64>,
     pub max_score: Option<f64>,
-    pub sort: Option<String>, // see SORT list in games.rs
+    pub sort: Option<String>, // see SORTS in commands/games.rs
     pub sort_desc: Option<bool>,
 }

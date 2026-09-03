@@ -1,5 +1,11 @@
 use crate::models::CategoryWeights;
 
+/// Round to one decimal place — the UI's score precision. Shared with
+/// analytics aggregation so all displayed scores round identically.
+pub(crate) fn round1(v: f64) -> f64 {
+    (v * 10.0).round() / 10.0
+}
+
 /// Weighted overall score from category scores.
 ///
 /// - Each category is 0..=100 and optional.
@@ -31,13 +37,13 @@ pub fn compute_overall(
         // Degenerate weights: fall back to plain mean.
         let n = filled.len() as f64;
         let sum: f64 = filled.iter().map(|(s, _)| *s as f64).sum();
-        return Some((sum / n * 10.0).round() / 10.0);
+        return Some(round1(sum / n));
     }
     let weighted: f64 = filled
         .iter()
         .map(|(s, w)| (*s as f64) * w / total_weight)
         .sum();
-    Some((weighted * 10.0).round() / 10.0) // one decimal
+    Some(round1(weighted))
 }
 
 #[cfg(test)]

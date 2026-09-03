@@ -24,7 +24,7 @@ pub fn set_star_rating(
     upsert_rating(&conn, entry_id, |sql_args| {
         sql_args.push(("star_rating", stars));
     })?;
-    super::games::get_entry(&conn, entry_id).ok_or_else(|| AppError::msg("entry not found"))
+    super::games::get_entry(&conn, entry_id)?.ok_or_else(|| AppError::msg("entry not found"))
 }
 
 #[derive(serde::Deserialize)]
@@ -73,7 +73,7 @@ pub fn set_category_scores(
         sql_args.push(("technical", scores.technical.map(|v| v as f64)));
         sql_args.push(("computed_overall", overall));
     })?;
-    super::games::get_entry(&conn, entry_id).ok_or_else(|| AppError::msg("entry not found"))
+    super::games::get_entry(&conn, entry_id)?.ok_or_else(|| AppError::msg("entry not found"))
 }
 
 /// Creates the rating row if needed (preserving the original `rated_at` for
