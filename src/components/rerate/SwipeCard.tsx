@@ -103,7 +103,9 @@ export default function SwipeCard({
         <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-surface-900 to-transparent" />
       </div>
       <div className="p-4 space-y-3">
-        <div className="flex items-start justify-between gap-3">
+        {/* Narrow card (small window): the status chip hugs the title instead
+            of pinning to the far edge, so the row doesn't span dead space. */}
+        <div className="flex items-start justify-start gap-3 sm:justify-between">
           <h2 className="text-lg font-semibold text-white leading-tight">{entry.name}</h2>
           <span
             className={`chip shrink-0 ${STATUS_COLORS[entry.status].bg} ${STATUS_COLORS[entry.status].text} ${STATUS_COLORS[entry.status].border}`}

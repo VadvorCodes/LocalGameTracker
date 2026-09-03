@@ -122,9 +122,9 @@ export default function Dashboard() {
           {analytics.starDistribution.some((d) => d.y > 0) ? (
             <ChartFrame kind="bar" data={analytics.starDistribution} xKey="x" yWholeNumbers>
               {/* Bar-level name/fill drive the tooltip (Cell fills only
-                  colour the bars themselves; without them the tooltip shows
-                  the raw dataKey in default black). */}
-              <Bar dataKey="y" name="Games" fill="#34d399" radius={[4, 4, 0, 0]}>
+                  colour the bars themselves); the fill shows as the tooltip's
+                  series colour, so it follows the theme accent. */}
+              <Bar dataKey="y" name="Games" fill={palette.accent} radius={[4, 4, 0, 0]}>
                 {analytics.starDistribution.map((d) => (
                   <Cell
                     key={d.x}
