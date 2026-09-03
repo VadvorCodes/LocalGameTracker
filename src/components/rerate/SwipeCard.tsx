@@ -103,14 +103,13 @@ export default function SwipeCard({
         <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-surface-900 to-transparent" />
       </div>
       <div className="p-4 space-y-3">
-        {/* The clamp tracks the window (app minimum is 960px wide, tauri.conf.json):
-            ~288px card at the smallest size, full 380px from the 1280 default up.
-            Below xl the chip slims down so a one-line title + chip still fill
-            the row end-to-end instead of wrapping and leaving dead space. */}
-        <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+        {/* Below xl (the 1280 default window) the chip hugs the title instead
+            of pinning to the card's far edge — leftover space belongs after
+            the chip, never between it and the title. */}
+        <div className="flex flex-wrap items-start justify-start gap-x-2 gap-y-1 xl:justify-between">
           <h2 className="text-lg font-semibold text-white leading-tight">{entry.name}</h2>
           <span
-            className={`chip shrink-0 px-1.5 xl:px-2 ${STATUS_COLORS[entry.status].bg} ${STATUS_COLORS[entry.status].text} ${STATUS_COLORS[entry.status].border}`}
+            className={`chip shrink-0 ${STATUS_COLORS[entry.status].bg} ${STATUS_COLORS[entry.status].text} ${STATUS_COLORS[entry.status].border}`}
           >
             {STATUS_LABELS[entry.status]}
           </span>
