@@ -20,6 +20,14 @@ export function scoreColor(v: number): string {
   return "text-rose-300";
 }
 
+/**
+ * Join the defined parts with " · " into one meta line (developer · release
+ * date · genres…). Null, undefined and empty parts are dropped.
+ */
+export function metaLine(...parts: (string | null | undefined)[]): string {
+  return parts.filter(Boolean).join(" · ");
+}
+
 /** One-line reading of how a star rating (0-5) compares to a 0-100 score. */
 export function divergenceText(stars: number, overall: number): string {
   const diff = stars * 20 - overall;

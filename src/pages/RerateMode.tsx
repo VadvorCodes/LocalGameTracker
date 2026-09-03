@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import type { LibraryEntry, PlayStatus, RerateDecision, ReratePoolItem } from "../types";
-import CoverImage from "../components/CoverImage";
-import { Stars } from "../components/StarRating";
-import { scoreColor } from "../lib/format";
+import { useSequentialFetch } from "../hooks/useSequentialFetch";
 import SwipeCard from "../components/rerate/SwipeCard";
 import MatchCard from "../components/rerate/MatchCard";
 import RerateRatingPanel from "../components/rerate/RerateRatingPanel";
+import SwipeBackdrop from "../components/rerate/SwipeBackdrop";
+import DecisionButton from "../components/rerate/DecisionButton";
+import PileList from "../components/rerate/PileList";
 
 type Phase = "idle" | "loading" | "swipe" | "review" | "rerate" | "done";
 type Scope = "played" | "finished";
@@ -24,181 +25,291 @@ const SCOPE_LABELS: Record<Scope, string> = {
   finished: "Completed & dropped only",
 };
 
+const EMPTY_POOL_MESSAGE = "No games are in scope right now — add some games to this scope first.";
+
+/**
+ * Everything one cycle tracks. `scope` and `scopeRows` stay outside: they are
+ * idle-screen concerns that no cycle transition touches.
+ */
+interface CycleState {
+  phase: Phase;
+  pool: ReratePoolItem[];
+  // Pile order as entry ids: piles render in this sequence and the re-rate
+  // queue keeps it, so dragging rows around changes the re-rating order.
+  order: number[];
+  decisions: Record<number, RerateDecision>;
+  swipeIdx: number;
+  dragX: number;
+  exitRequest: RerateDecision | null;
+  rerateQueue: ReratePoolItem[];
+  rerateIdx: number;
+  summary: { rerated: number; skipped: number };
+  error: string | null;
+  // True after "Back to swiping" — the pile is then re-swiped fresh while the
+  // squares (buttons + progress bar) show what was chosen last time.
+  revisiting: boolean;
+  // Snapshot of the decisions made before the current (re)pass started.
+  previousDecisions: Record<number, RerateDecision>;
+  dragId: number | null;
+  dropTarget: { pile: RerateDecision; index: number; edge: "top" | "left" | null } | null;
+}
+
+/**
+ * The canonical reset: every exit from a cycle ("Cancel cycle", failed or
+ * empty session, "Start another cycle") returns to exactly this object, so
+ * there is one place — not one per exit path — that knows what a clean slate
+ * looks like.
+ */
+const initialState: CycleState = {
+  phase: "idle",
+  pool: [],
+  order: [],
+  decisions: {},
+  swipeIdx: 0,
+  dragX: 0,
+  exitRequest: null,
+  rerateQueue: [],
+  rerateIdx: 0,
+  summary: { rerated: 0, skipped: 0 },
+  error: null,
+  revisiting: false,
+  previousDecisions: {},
+  dragId: null,
+  dropTarget: null,
+};
+
+/** The cycle's transitions, named after the user actions that trigger them. */
+type CycleAction =
+  | { type: "startSession" }
+  | { type: "poolLoaded"; pool: ReratePoolItem[] }
+  | { type: "sessionFailed"; message: string }
+  | { type: "requestDecision"; decision: RerateDecision }
+  | { type: "cardDecided"; decision: RerateDecision }
+  | { type: "dragXChanged"; x: number }
+  | { type: "backToSwiping" }
+  | { type: "cancel" }
+  | { type: "togglePile"; entryId: number; pile: RerateDecision }
+  | { type: "dragStarted"; entryId: number }
+  | { type: "dropTargetChanged"; pile: RerateDecision; index: number; edge: "top" | "left" | null }
+  | { type: "dragEnded" }
+  | { type: "reorder"; entryId: number; pile: RerateDecision; index: number }
+  | { type: "confirmReview" }
+  | { type: "gameFinished"; saved: boolean };
+
+/** Pile contents in display order. Ids without a pool item (an order entry
+ * outliving its pool row) are skipped rather than crashing the render. */
+function pileItems(
+  pool: ReratePoolItem[],
+  order: number[],
+  decisions: Record<number, RerateDecision>,
+  decision: RerateDecision,
+): ReratePoolItem[] {
+  const byId = new Map(pool.map((i) => [i.entry.id, i]));
+  return order.flatMap((id) => {
+    const item = byId.get(id);
+    return decisions[id] === decision && item ? [item] : [];
+  });
+}
+
+function cycleReducer(state: CycleState, action: CycleAction): CycleState {
+  switch (action.type) {
+    case "startSession":
+      return { ...state, phase: "loading", error: null };
+
+    case "poolLoaded":
+      // An empty pool bounces straight back to the idle screen with the reason.
+      if (action.pool.length === 0) return { ...initialState, error: EMPTY_POOL_MESSAGE };
+      return {
+        ...initialState,
+        phase: "swipe",
+        pool: action.pool,
+        order: action.pool.map((i) => i.entry.id),
+      };
+
+    case "sessionFailed":
+      return { ...initialState, error: action.message };
+
+    case "requestDecision":
+      if (state.exitRequest) return state; // a card is already flying out
+      return { ...state, exitRequest: action.decision };
+
+    case "dragXChanged":
+      return { ...state, dragX: action.x };
+
+    case "cardDecided": {
+      const item = state.pool[state.swipeIdx];
+      const decisions = item
+        ? { ...state.decisions, [item.entry.id]: action.decision }
+        : state.decisions;
+      const last = state.swipeIdx + 1 >= state.pool.length;
+      return {
+        ...state,
+        decisions,
+        exitRequest: null,
+        dragX: 0,
+        swipeIdx: last ? state.swipeIdx : state.swipeIdx + 1,
+        phase: last ? "review" : state.phase,
+      };
+    }
+
+    case "backToSwiping":
+      // Squares keep showing what was chosen; the pile itself is re-swiped
+      // from scratch (rectangles start gray again).
+      return {
+        ...state,
+        previousDecisions: state.decisions,
+        decisions: {},
+        swipeIdx: 0,
+        exitRequest: null,
+        dragX: 0,
+        revisiting: true,
+        phase: "swipe",
+      };
+
+    case "cancel":
+      return { ...initialState };
+
+    case "togglePile":
+      // Click keeps the row's global order slot — only its decision flips.
+      return { ...state, decisions: { ...state.decisions, [action.entryId]: action.pile } };
+
+    case "dragStarted":
+      return { ...state, dragId: action.entryId };
+
+    case "dropTargetChanged": {
+      const prev = state.dropTarget;
+      if (
+        prev &&
+        prev.pile === action.pile &&
+        prev.index === action.index &&
+        prev.edge === action.edge
+      ) {
+        return state;
+      }
+      return {
+        ...state,
+        dropTarget: { pile: action.pile, index: action.index, edge: action.edge },
+      };
+    }
+
+    case "dragEnded":
+      return { ...state, dragId: null, dropTarget: null };
+
+    case "reorder": {
+      // A drop ends the drag; ids not in the pool (stale dataTransfer) are ignored.
+      if (!state.pool.some((i) => i.entry.id === action.entryId)) return state;
+      const { decisions, order } = state;
+      // The game joins `pile` (its decision flips) at `index`; everything else
+      // keeps its relative order.
+      const pileIds = order.filter(
+        (oid) => oid !== action.entryId && decisions[oid] === action.pile,
+      );
+      const resequenced = [
+        ...pileIds.slice(0, action.index),
+        action.entryId,
+        ...pileIds.slice(action.index),
+      ];
+      const rest = order.filter((oid) => oid !== action.entryId && decisions[oid] !== action.pile);
+      return {
+        ...state,
+        decisions: { ...decisions, [action.entryId]: action.pile },
+        order: [...rest, ...resequenced],
+        dragId: null,
+        dropTarget: null,
+      };
+    }
+
+    case "confirmReview": {
+      const queue = pileItems(state.pool, state.order, state.decisions, "rerate");
+      return {
+        ...state,
+        rerateQueue: queue,
+        rerateIdx: 0,
+        phase: queue.length > 0 ? "rerate" : "done",
+      };
+    }
+
+    case "gameFinished": {
+      const summary = {
+        rerated: state.summary.rerated + (action.saved ? 1 : 0),
+        skipped: state.summary.skipped + (action.saved ? 0 : 1),
+      };
+      const last = state.rerateIdx + 1 >= state.rerateQueue.length;
+      return {
+        ...state,
+        summary,
+        rerateIdx: last ? state.rerateIdx : state.rerateIdx + 1,
+        phase: last ? "done" : state.phase,
+      };
+    }
+  }
+}
+
 export default function RerateMode() {
-  const [phase, setPhase] = useState<Phase>("idle");
+  const [cycle, dispatch] = useReducer(cycleReducer, initialState);
   const [scope, setScope] = useState<Scope>(
     // validate the persisted value — a corrupted entry must fall back, not
     // flow undefined statuses into the backend queries
     () => (localStorage.getItem(SCOPE_KEY) === "finished" ? "finished" : "played"),
   );
   const [scopeRows, setScopeRows] = useState<LibraryEntry[] | null>(null);
-  const [pool, setPool] = useState<ReratePoolItem[]>([]);
-  const [decisions, setDecisions] = useState<Record<number, RerateDecision>>({});
-  const [swipeIdx, setSwipeIdx] = useState(0);
-  const [dragX, setDragX] = useState(0);
-  const [exitRequest, setExitRequest] = useState<RerateDecision | null>(null);
-  const [rerateQueue, setRerateQueue] = useState<ReratePoolItem[]>([]);
-  const [rerateIdx, setRerateIdx] = useState(0);
-  const [summary, setSummary] = useState({ rerated: 0, skipped: 0 });
-  const [error, setError] = useState<string | null>(null);
-  // True after "Back to swiping" — the pile is then re-swiped fresh while the
-  // squares (buttons + progress bar) show what was chosen last time.
-  const [revisiting, setRevisiting] = useState(false);
-  // Snapshot of the decisions made before the current (re)pass started.
-  const [previousDecisions, setPreviousDecisions] = useState<Record<number, RerateDecision>>({});
-  // Pile order as entry ids: piles render in this sequence and the re-rate
-  // queue keeps it, so dragging rows around changes the re-rating order.
-  const [order, setOrder] = useState<number[]>([]);
-  const [dragId, setDragId] = useState<number | null>(null);
-  const [dropTarget, setDropTarget] = useState<{
-    pile: RerateDecision;
-    index: number;
-    edge: "top" | "left" | null;
-  } | null>(null);
+  const { begin, isCurrent } = useSequentialFetch();
 
   // Setup-screen counts, from the same rule the backend applies to build the
   // pool: in scope and not tagged "Recently Rerated". Rows include the tag, so
   // eligible/cooling are exact rather than an upper bound.
   useEffect(() => {
-    if (phase !== "idle") return;
-    let alive = true;
+    if (cycle.phase !== "idle") return;
+    const seq = begin();
     api
       .libraryQuery({ statuses: SCOPE_STATUSES[scope], sort: "name" })
-      .then((rows) => alive && setScopeRows(rows))
-      .catch(() => alive && setScopeRows(null));
-    return () => {
-      alive = false;
-    };
-  }, [phase, scope]);
+      .then((rows) => isCurrent(seq) && setScopeRows(rows))
+      .catch(() => isCurrent(seq) && setScopeRows(null));
+  }, [cycle.phase, scope, begin, isCurrent]);
 
   function changeScope(s: Scope) {
     setScope(s);
     localStorage.setItem(SCOPE_KEY, s);
   }
 
-  function resetToIdle() {
-    setPhase("idle");
-    setPool([]);
-    setDecisions({});
-    setSwipeIdx(0);
-    setDragX(0);
-    setExitRequest(null);
-    setRerateQueue([]);
-    setRerateIdx(0);
-    setSummary({ rerated: 0, skipped: 0 });
-    setError(null);
-    setRevisiting(false);
-    setPreviousDecisions({});
-    setOrder([]);
-    setDragId(null);
-    setDropTarget(null);
-  }
-
   async function startCycle() {
-    setPhase("loading");
-    setError(null);
+    dispatch({ type: "startSession" });
     try {
       const items = await api.startRerateSession(SCOPE_STATUSES[scope]);
-      if (items.length === 0) {
-        setError("No games are in scope right now — add some games to this scope first.");
-        setPhase("idle");
-        return;
-      }
-      setPool(items);
-      setDecisions({});
-      setOrder(items.map((i) => i.entry.id));
-      setSwipeIdx(0);
-      setDragX(0);
-      setExitRequest(null);
-      setRevisiting(false);
-      setPreviousDecisions({});
-      setPhase("swipe");
+      dispatch({ type: "poolLoaded", pool: items });
     } catch (e) {
-      setError(String(e));
-      setPhase("idle");
+      dispatch({ type: "sessionFailed", message: String(e) });
     }
   }
 
   const requestDecision = useCallback(
-    (d: RerateDecision) => {
-      if (exitRequest) return; // a card is already flying out
-      setExitRequest(d);
-    },
-    [exitRequest],
+    (d: RerateDecision) => dispatch({ type: "requestDecision", decision: d }),
+    [dispatch],
   );
 
   // Arrow keys mirror the swipe gestures.
   useEffect(() => {
-    if (phase !== "swipe") return;
+    if (cycle.phase !== "swipe") return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "ArrowLeft") requestDecision("rerate");
       if (e.key === "ArrowRight") requestDecision("keep");
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, requestDecision]);
+  }, [cycle.phase, requestDecision]);
 
-  function cardDecided(d: RerateDecision) {
-    const item = pool[swipeIdx];
-    if (item) setDecisions((prev) => ({ ...prev, [item.entry.id]: d }));
-    setExitRequest(null);
-    setDragX(0);
-    if (swipeIdx + 1 >= pool.length) setPhase("review");
-    else setSwipeIdx(swipeIdx + 1);
-  }
+  // Pile derivation, memoised so drag-tracking re-renders don't rebuild it.
+  const { pool, order, decisions } = cycle;
+  const rerateItems = useMemo(
+    () => pileItems(pool, order, decisions, "rerate"),
+    [pool, order, decisions],
+  );
+  const keepItems = useMemo(
+    () => pileItems(pool, order, decisions, "keep"),
+    [pool, order, decisions],
+  );
 
-  const byId = new Map(pool.map((i) => [i.entry.id, i]));
-  const itemsFor = (d: RerateDecision) =>
-    order.filter((id) => decisions[id] === d).map((id) => byId.get(id)!);
-  const rerateItems = itemsFor("rerate");
-  const keepItems = itemsFor("keep");
-
-  // Drop `id` into `pile` at `index`: the game joins the pile (its decision
-  // flips) at that position; everything else keeps its relative order.
-  function moveTo(id: number, pile: RerateDecision, index: number) {
-    setDecisions((prev) => ({ ...prev, [id]: pile }));
-    setOrder((prev) => {
-      const pileIds = prev.filter((oid) => oid !== id && decisions[oid] === pile);
-      const resequenced = [...pileIds.slice(0, index), id, ...pileIds.slice(index)];
-      const rest = prev.filter((oid) => oid !== id && decisions[oid] !== pile);
-      return [...rest, ...resequenced];
-    });
-  }
-
-  function handleDragOver(pile: RerateDecision, index: number, edge: "top" | "left" | null) {
-    setDropTarget((prev) =>
-      prev && prev.pile === pile && prev.index === index && prev.edge === edge
-        ? prev
-        : { pile, index, edge },
-    );
-  }
-
-  function handleDragEnd() {
-    setDragId(null);
-    setDropTarget(null);
-  }
-
-  function handleDrop(id: number, pile: RerateDecision, index: number) {
-    handleDragEnd();
-    if (byId.has(id)) moveTo(id, pile, index);
-  }
-
-  function confirmReview() {
-    setRerateQueue(rerateItems);
-    setRerateIdx(0);
-    setPhase(rerateItems.length > 0 ? "rerate" : "done");
-  }
-
-  function finishGame(saved: boolean) {
-    setSummary((s) => ({
-      rerated: s.rerated + (saved ? 1 : 0),
-      skipped: s.skipped + (saved ? 0 : 1),
-    }));
-    if (rerateIdx + 1 >= rerateQueue.length) setPhase("done");
-    else setRerateIdx(rerateIdx + 1);
-  }
-
-  if (phase === "loading") {
+  if (cycle.phase === "loading") {
     return (
       <div className="h-full flex items-center justify-center text-slate-500">
         Shuffling your library…
@@ -206,27 +317,30 @@ export default function RerateMode() {
     );
   }
 
-  if (phase === "swipe") {
-    const item = pool[swipeIdx];
+  if (cycle.phase === "swipe") {
+    const item = pool[cycle.swipeIdx];
     const decidedCount = Object.keys(decisions).length;
     return (
       <div className="h-full flex flex-col relative overflow-hidden">
-        <SwipeBackdrop dragX={dragX} />
+        <SwipeBackdrop dragX={cycle.dragX} />
         <div className="relative p-6 flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold text-white">Re-Rate Mode</h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Game {swipeIdx + 1} of {pool.length} · {decidedCount} categorised
+              Game {cycle.swipeIdx + 1} of {pool.length} · {decidedCount} categorised
             </p>
           </div>
-          <button className="btn-ghost !py-1.5 text-xs" onClick={resetToIdle}>
+          <button
+            className="btn-ghost !py-1.5 text-xs"
+            onClick={() => dispatch({ type: "cancel" })}
+          >
             Cancel cycle
           </button>
         </div>
         <div className="relative px-6 flex gap-1">
           {pool.map((i) => {
             const d = decisions[i.entry.id];
-            const prev = previousDecisions[i.entry.id];
+            const prev = cycle.previousDecisions[i.entry.id];
             return (
               <div key={i.entry.id} className="flex-1 flex flex-col items-center gap-1.5">
                 <div
@@ -240,7 +354,7 @@ export default function RerateMode() {
                 />
                 <div
                   className={`h-2.5 w-2.5 rounded-sm transition-colors ${
-                    revisiting && prev
+                    cycle.revisiting && prev
                       ? prev === "rerate"
                         ? "bg-rose-500"
                         : "bg-emerald-500"
@@ -256,9 +370,9 @@ export default function RerateMode() {
           <SwipeCard
             key={item.entry.id}
             item={item}
-            exitRequest={exitRequest}
-            onDecided={cardDecided}
-            onDragX={setDragX}
+            exitRequest={cycle.exitRequest}
+            onDecided={(d) => dispatch({ type: "cardDecided", decision: d })}
+            onDragX={(x) => dispatch({ type: "dragXChanged", x })}
           />
 
           <p className="text-xs text-slate-500 text-center">
@@ -268,25 +382,28 @@ export default function RerateMode() {
 
           <div
             className="flex gap-8 items-start transition-opacity duration-150"
-            style={{ opacity: dragX !== 0 ? 0 : 1 }}
+            style={{ opacity: cycle.dragX !== 0 ? 0 : 1 }}
           >
             <DecisionButton
               kind="rerate"
               label="✕ Re-rate"
-              previous={previousDecisions[item.entry.id]}
-              showIndicator={revisiting}
+              previous={cycle.previousDecisions[item.entry.id]}
+              showIndicator={cycle.revisiting}
               onClick={() => requestDecision("rerate")}
             />
             <DecisionButton
               kind="keep"
               label="✓ Keep rating"
-              previous={previousDecisions[item.entry.id]}
-              showIndicator={revisiting}
+              previous={cycle.previousDecisions[item.entry.id]}
+              showIndicator={cycle.revisiting}
               onClick={() => requestDecision("keep")}
             />
           </div>
 
-          <div className="transition-opacity duration-150" style={{ opacity: dragX !== 0 ? 0 : 1 }}>
+          <div
+            className="transition-opacity duration-150"
+            style={{ opacity: cycle.dragX !== 0 ? 0 : 1 }}
+          >
             {item.similar.length > 0 && (
               <div className="max-w-3xl">
                 <h3 className="text-[11px] uppercase tracking-wide text-slate-500 mb-2 text-center">
@@ -305,7 +422,7 @@ export default function RerateMode() {
     );
   }
 
-  if (phase === "review") {
+  if (cycle.phase === "review") {
     return (
       <div className="p-8 max-w-4xl mx-auto space-y-8">
         <header className="flex items-center justify-between">
@@ -316,20 +433,7 @@ export default function RerateMode() {
               it, which is the order the re-rating follows.
             </p>
           </div>
-          <button
-            className="btn-ghost"
-            onClick={() => {
-              // Squares keep showing what was chosen; the pile itself is
-              // re-swiped from scratch (rectangles start gray again).
-              setPreviousDecisions(decisions);
-              setDecisions({});
-              setSwipeIdx(0);
-              setExitRequest(null);
-              setDragX(0);
-              setRevisiting(true);
-              setPhase("swipe");
-            }}
-          >
+          <button className="btn-ghost" onClick={() => dispatch({ type: "backToSwiping" })}>
             ← Back to swiping
           </button>
         </header>
@@ -338,31 +442,39 @@ export default function RerateMode() {
           title={`Re-rate — ${rerateItems.length}`}
           tone="rose"
           items={rerateItems}
-          draggedId={dragId}
-          dropIndex={dropTarget?.pile === "rerate" ? dropTarget.index : null}
-          dropEdge={dropTarget?.pile === "rerate" ? dropTarget.edge : null}
-          onToggle={(id) => setDecisions((p) => ({ ...p, [id]: "keep" }))}
-          onDragOver={(index, edge) => handleDragOver("rerate", index, edge)}
-          onDropItem={(id, index) => handleDrop(id, "rerate", index)}
-          onDragStart={setDragId}
-          onDragEnd={handleDragEnd}
+          draggedId={cycle.dragId}
+          dropIndex={cycle.dropTarget?.pile === "rerate" ? cycle.dropTarget.index : null}
+          dropEdge={cycle.dropTarget?.pile === "rerate" ? cycle.dropTarget.edge : null}
+          onToggle={(id) => dispatch({ type: "togglePile", entryId: id, pile: "keep" })}
+          onDragOver={(index, edge) =>
+            dispatch({ type: "dropTargetChanged", pile: "rerate", index, edge })
+          }
+          onDropItem={(id, index) =>
+            dispatch({ type: "reorder", entryId: id, pile: "rerate", index })
+          }
+          onDragStart={(id) => dispatch({ type: "dragStarted", entryId: id })}
+          onDragEnd={() => dispatch({ type: "dragEnded" })}
         />
         <PileList
           title={`Keep rating — ${keepItems.length}`}
           tone="emerald"
           items={keepItems}
-          draggedId={dragId}
-          dropIndex={dropTarget?.pile === "keep" ? dropTarget.index : null}
-          dropEdge={dropTarget?.pile === "keep" ? dropTarget.edge : null}
-          onToggle={(id) => setDecisions((p) => ({ ...p, [id]: "rerate" }))}
-          onDragOver={(index, edge) => handleDragOver("keep", index, edge)}
-          onDropItem={(id, index) => handleDrop(id, "keep", index)}
-          onDragStart={setDragId}
-          onDragEnd={handleDragEnd}
+          draggedId={cycle.dragId}
+          dropIndex={cycle.dropTarget?.pile === "keep" ? cycle.dropTarget.index : null}
+          dropEdge={cycle.dropTarget?.pile === "keep" ? cycle.dropTarget.edge : null}
+          onToggle={(id) => dispatch({ type: "togglePile", entryId: id, pile: "rerate" })}
+          onDragOver={(index, edge) =>
+            dispatch({ type: "dropTargetChanged", pile: "keep", index, edge })
+          }
+          onDropItem={(id, index) =>
+            dispatch({ type: "reorder", entryId: id, pile: "keep", index })
+          }
+          onDragStart={(id) => dispatch({ type: "dragStarted", entryId: id })}
+          onDragEnd={() => dispatch({ type: "dragEnded" })}
         />
 
         <div className="flex justify-end">
-          <button className="btn-primary" onClick={confirmReview}>
+          <button className="btn-primary" onClick={() => dispatch({ type: "confirmReview" })}>
             {rerateItems.length > 0 ? "Confirm & start re-rating" : "Confirm & finish"}
           </button>
         </div>
@@ -370,46 +482,46 @@ export default function RerateMode() {
     );
   }
 
-  if (phase === "rerate") {
-    const item = rerateQueue[rerateIdx];
+  if (cycle.phase === "rerate") {
+    const item = cycle.rerateQueue[cycle.rerateIdx];
     return (
       <div className="p-4 sm:p-8 max-w-4xl mx-auto h-full flex flex-col">
         <header className="mb-6">
           <h1 className="text-xl font-semibold text-white">Re-rating</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Game {rerateIdx + 1} of {rerateQueue.length} — update the scores that no longer feel
-            right. Skipped games keep their rating and stay eligible for future cycles.
+            Game {cycle.rerateIdx + 1} of {cycle.rerateQueue.length} — update the scores that no
+            longer feel right. Skipped games keep their rating and stay eligible for future cycles.
           </p>
         </header>
         <div className="flex-1 flex items-start justify-center">
           <RerateRatingPanel
             key={item.entry.id}
             entry={item.entry}
-            onSaved={() => finishGame(true)}
-            onSkipped={() => finishGame(false)}
+            onSaved={() => dispatch({ type: "gameFinished", saved: true })}
+            onSkipped={() => dispatch({ type: "gameFinished", saved: false })}
           />
         </div>
       </div>
     );
   }
 
-  if (phase === "done") {
-    const kept = pool.length - summary.rerated - summary.skipped;
+  if (cycle.phase === "done") {
+    const kept = pool.length - cycle.summary.rerated - cycle.summary.skipped;
     return (
       <div className="p-8 max-w-xl mx-auto h-full flex flex-col items-center justify-center text-center space-y-6">
         <div className="text-5xl">🎉</div>
         <div>
           <h1 className="text-xl font-semibold text-white">Cycle complete</h1>
           <p className="text-sm text-slate-500 mt-2">
-            {summary.rerated} re-rated · {summary.skipped} skipped · {kept} kept their rating.
-            Re-rated games sit out the next cycle, then become eligible again.
+            {cycle.summary.rerated} re-rated · {cycle.summary.skipped} skipped · {kept} kept their
+            rating. Re-rated games sit out the next cycle, then become eligible again.
           </p>
         </div>
         <div className="flex gap-3">
           <Link to="/library" className="btn-primary">
             Back to Library
           </Link>
-          <button className="btn-ghost" onClick={resetToIdle}>
+          <button className="btn-ghost" onClick={() => dispatch({ type: "cancel" })}>
             Start another cycle
           </button>
         </div>
@@ -485,267 +597,8 @@ export default function RerateMode() {
             {inScope} games back in the pool.
           </p>
         )}
-        {error && <p className="text-xs text-rose-400">{error}</p>}
+        {cycle.error && <p className="text-xs text-rose-400">{cycle.error}</p>}
       </div>
-    </div>
-  );
-}
-
-/** Swipe-phase decision button. When revisiting (after "Back to swiping") a
- * small square appears under the side chosen last time, as a reminder — the
- * pass itself is fresh, so both buttons stay active. */
-function DecisionButton({
-  kind,
-  label,
-  previous,
-  showIndicator,
-  onClick,
-}: {
-  kind: RerateDecision;
-  label: string;
-  previous: RerateDecision | undefined;
-  showIndicator: boolean;
-  onClick: () => void;
-}) {
-  const isRerate = kind === "rerate";
-  const marked = showIndicator && previous === kind;
-  return (
-    <div className="flex flex-col items-center gap-1.5">
-      <button
-        className={isRerate ? "btn-danger" : "btn bg-emerald-600 hover:bg-emerald-500 text-white"}
-        onClick={onClick}
-      >
-        {label}
-      </button>
-      <div
-        className={`h-2.5 w-2.5 rounded-sm transition-colors ${
-          marked ? (isRerate ? "bg-rose-500" : "bg-emerald-500") : "bg-transparent"
-        }`}
-        title={marked ? "Chosen last time" : undefined}
-      />
-    </div>
-  );
-}
-
-/** Red / green swipe-direction backdrop. The label repeats vertically down the
- * full height of each side (so it reads at any window size) and sits behind
- * the tint, out of the card's travel path at the sides. */
-function SwipeBackdrop({ dragX }: { dragX: number }) {
-  const left = Math.min(1, Math.max(0, -dragX) / 160);
-  const right = Math.min(1, Math.max(0, dragX) / 160);
-  return (
-    <div className="absolute inset-0 pointer-events-none flex overflow-hidden">
-      <div
-        className="flex-1 flex flex-col items-center justify-around py-4 bg-rose-600"
-        style={{ opacity: left * 0.2 }}
-      >
-        {[0, 1, 2, 3].map((k) => (
-          <span
-            key={k}
-            className="whitespace-nowrap text-4xl font-black tracking-widest text-rose-400"
-            style={{ opacity: Math.min(1, left * 1.6), transform: "rotate(-8deg)" }}
-          >
-            RE-RATE
-          </span>
-        ))}
-      </div>
-      <div
-        className="flex-1 flex flex-col items-center justify-around py-4 bg-emerald-600"
-        style={{ opacity: right * 0.2 }}
-      >
-        {[0, 1, 2, 3].map((k) => (
-          <span
-            key={k}
-            className="whitespace-nowrap text-4xl font-black tracking-widest text-emerald-400"
-            style={{ opacity: Math.min(1, right * 1.6), transform: "rotate(8deg)" }}
-          >
-            KEEP RATING
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function PileList({
-  title,
-  tone,
-  items,
-  draggedId,
-  dropIndex,
-  dropEdge,
-  onToggle,
-  onDragOver,
-  onDropItem,
-  onDragStart,
-  onDragEnd,
-}: {
-  title: string;
-  tone: "rose" | "emerald";
-  items: ReratePoolItem[];
-  draggedId: number | null;
-  dropIndex: number | null;
-  dropEdge: "top" | "left" | null;
-  onToggle: (entryId: number) => void;
-  onDragOver: (index: number, edge: "top" | "left" | null) => void;
-  onDropItem: (entryId: number, index: number) => void;
-  onDragStart: (entryId: number) => void;
-  onDragEnd: () => void;
-}) {
-  // Where a drop would land. An item under the pointer splits at its centre:
-  // left half = before it, right half = after it. Between rows, the vertical
-  // midpoints decide. `edge` picks which side of the target the line draws on
-  // (null = appending, the pile ring alone marks the spot).
-  function dropIndexAt(e: React.DragEvent): { index: number; edge: "top" | "left" | null } {
-    const rows = Array.from(e.currentTarget.querySelectorAll<HTMLElement>("[data-pile-row]"));
-    const rects = rows.map((r) => r.getBoundingClientRect());
-    const sameRow = (a: number, b: number) => Math.abs(rects[a].top - rects[b].top) < 4;
-
-    let over = -1;
-    for (let k = 0; k < rows.length; k++) {
-      const r = rects[k];
-      if (
-        e.clientX >= r.left &&
-        e.clientX <= r.right &&
-        e.clientY >= r.top &&
-        e.clientY <= r.bottom
-      ) {
-        over = k;
-        break;
-      }
-    }
-
-    if (over >= 0) {
-      if (e.clientX <= rects[over].left + rects[over].width / 2) {
-        return { index: over, edge: over > 0 && sameRow(over - 1, over) ? "left" : "top" };
-      }
-      const after = over + 1;
-      if (after >= rows.length) return { index: after, edge: null };
-      return { index: after, edge: sameRow(over, after) ? "left" : "top" };
-    }
-
-    let i = rows.length;
-    for (let k = 0; k < rows.length; k++) {
-      if (e.clientY < rects[k].top + rects[k].height / 2) {
-        i = k;
-        break;
-      }
-    }
-    if (i >= rows.length) return { index: i, edge: null };
-    return { index: i, edge: i > 0 && sameRow(i - 1, i) ? "left" : "top" };
-  }
-
-  return (
-    <section
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-        const { index, edge } = dropIndexAt(e);
-        onDragOver(index, edge);
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        onDropItem(Number(e.dataTransfer.getData("text/plain")), dropIndexAt(e).index);
-      }}
-    >
-      <h2
-        className={`text-sm font-semibold mb-3 ${
-          tone === "rose" ? "text-rose-300" : "text-emerald-300"
-        }`}
-      >
-        {title}
-      </h2>
-      {items.length === 0 ? (
-        <p
-          className={`text-xs text-slate-600 p-3 rounded-lg transition-shadow ${
-            dropIndex != null ? "ring-1 ring-accent-500/50" : ""
-          }`}
-        >
-          Nothing here — drop a game to file it.
-        </p>
-      ) : (
-        <div
-          className={`grid grid-cols-1 md:grid-cols-2 gap-2 rounded-lg transition-shadow ${
-            dropIndex != null ? "ring-1 ring-accent-500/40" : ""
-          }`}
-        >
-          {items.map(({ entry }) => (
-            <PileRow
-              key={entry.id}
-              entry={entry}
-              dragging={draggedId === entry.id}
-              dropBefore={
-                dropIndex != null && dropEdge != null && items[dropIndex]?.entry.id === entry.id
-              }
-              dropEdge={dropEdge}
-              onToggle={onToggle}
-              onDragStart={onDragStart}
-              onDragEnd={onDragEnd}
-            />
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function PileRow({
-  entry,
-  dragging,
-  dropBefore,
-  dropEdge,
-  onToggle,
-  onDragStart,
-  onDragEnd,
-}: {
-  entry: LibraryEntry;
-  dragging: boolean;
-  dropBefore: boolean;
-  dropEdge: "top" | "left" | null;
-  onToggle: (id: number) => void;
-  onDragStart: (id: number) => void;
-  onDragEnd: () => void;
-}) {
-  return (
-    <div
-      className={`border-2 border-transparent ${
-        dropBefore ? (dropEdge === "left" ? "border-l-accent-500" : "border-t-accent-500") : ""
-      }`}
-    >
-      <button
-        data-pile-row
-        draggable
-        onDragStart={(e) => {
-          e.dataTransfer.effectAllowed = "move";
-          e.dataTransfer.setData("text/plain", String(entry.id));
-          onDragStart(entry.id);
-        }}
-        onDragEnd={onDragEnd}
-        className={`card w-full p-2 flex items-center gap-3 text-left hover:border-accent-500/50 transition-colors ${
-          dragging ? "opacity-40" : ""
-        }`}
-        onClick={() => onToggle(entry.id)}
-        title="Click to move to the other pile, drag to reorder"
-      >
-        <div className="w-20 h-12 rounded overflow-hidden shrink-0 bg-surface-800">
-          <CoverImage
-            url={entry.coverUrl}
-            alt={entry.name}
-            className="w-full h-full object-cover"
-          />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm text-slate-100 truncate">{entry.name}</div>
-          <div className="flex items-center gap-2 mt-1">
-            <Stars value={entry.starRating} />
-            {entry.computedOverall != null && (
-              <span className={`text-xs font-semibold ${scoreColor(entry.computedOverall)}`}>
-                {entry.computedOverall.toFixed(1)}
-              </span>
-            )}
-          </div>
-        </div>
-      </button>
     </div>
   );
 }

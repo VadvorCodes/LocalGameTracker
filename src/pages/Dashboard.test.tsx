@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { fireEvent } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 vi.mock("recharts", () => {
@@ -320,12 +319,36 @@ describe("Dashboard — breakdowns and lists", () => {
     expect(screen.queryByText("Loved It")).toBeNull();
   });
 
-  it("stays on the skeleton when analytics fail to load", async () => {
-    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("shows an error banner with retry when the initial analytics load fails", async () => {
     apiMock.getAnalytics.mockRejectedValueOnce(new Error("no analytics"));
     renderDashboard();
-    await waitFor(() => expect(errSpy).toHaveBeenCalled());
-    expect(document.querySelector(".animate-pulse")).toBeInTheDocument();
-    errSpy.mockRestore();
+    const banner = await screen.findByText(/Could not load analytics/);
+    expect(banner).toHaveTextContent("no analytics");
+    // the error state replaces the skeleton instead of pulsing forever
+    expect(document.querySelector(".animate-pulse")).toBeNull();
+    expect(screen.queryByText("Games tracked")).toBeNull();
+
+    // retrying without a remount recovers into the loaded dashboard
+    apiMock.getAnalytics.mockResolvedValueOnce(makeAnalytics({ totalGames: 7 }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("Games tracked")).toBeInTheDocument();
+    expect(screen.getByText("Games tracked").nextElementSibling).toHaveTextContent("7");
+    expect(apiMock.getAnalytics).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/Could not load analytics/)).toBeNull();
+  });
+
+  it("surfaces a refetch failure above the already-loaded stats", async () => {
+    const ranked = makeAnalytics({
+      highestRated: [makeMini({ entryId: 1, stars: 5, overall: 90 })],
+      lowestRated: [makeMini({ entryId: 2, stars: 1, overall: 20 })],
+    });
+    apiMock.getAnalytics.mockResolvedValue(ranked);
+    renderDashboard();
+    await screen.findByText("My gaming dashboard");
+    apiMock.getAnalytics.mockRejectedValueOnce(new Error("boom"));
+    fireEvent.click(screen.getByTitle("Rank by ★ simple rating"));
+    expect(await screen.findByText(/Could not load analytics/)).toHaveTextContent("boom");
+    // the stale analytics stay visible under the banner
+    expect(screen.getByText("Games tracked")).toBeInTheDocument();
   });
 });

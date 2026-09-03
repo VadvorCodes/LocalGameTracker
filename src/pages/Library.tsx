@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import type { LibraryEntry, LibraryQuery, PlayStatus, SortKey } from "../types";
@@ -6,6 +6,9 @@ import { SORT_LABELS, STATUSES, STATUS_COLORS, STATUS_LABELS } from "../types";
 import { GameCard, SkeletonCard } from "../components/GameCard";
 import FilterGroup from "../components/FilterGroup";
 import { formatPlaytime } from "../lib/format";
+import { toggleSet } from "../lib/sets";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { useSequentialFetch } from "../hooks/useSequentialFetch";
 import { useApp } from "../store";
 
 // Rating, detailed rating, date added and name sit at the top of the sort
@@ -17,108 +20,133 @@ const CATEGORY_SORTS: SortKey[] = ["gameplay", "story", "music", "technical"];
 // Every sort that only exists while extended sorting is enabled.
 const EXTENDED_SORTS: SortKey[] = [...OTHER_SORTS, ...CATEGORY_SORTS];
 
+/** The chip/range filters, as one object so initial state and "Clear all" cannot drift. */
+interface Filters {
+  statuses: Set<PlayStatus>;
+  favouritesOnly: boolean;
+  selGenres: Set<string>;
+  selPlatforms: Set<string>;
+  minStars: number;
+  minScore: number;
+}
+
+/** Factory (not a shared const) so every session gets its own Set instances;
+ * all updates below are immutable, so the returned object is never mutated. */
+function makeDefaultFilters(): Filters {
+  return {
+    statuses: new Set<PlayStatus>(),
+    favouritesOnly: false,
+    selGenres: new Set<string>(),
+    selPlatforms: new Set<string>(),
+    minStars: 0,
+    minScore: 0,
+  };
+}
+
 export default function Library() {
   const [entries, setEntries] = useState<LibraryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [statuses, setStatuses] = useState<Set<PlayStatus>>(new Set());
-  const [favouritesOnly, setFavouritesOnly] = useState(false);
+  const [filters, setFilters] = useState<Filters>(makeDefaultFilters);
   const [genres, setGenres] = useState<string[]>([]);
   const [platforms, setPlatforms] = useState<string[]>([]);
-  const [selGenres, setSelGenres] = useState<Set<string>>(new Set());
-  const [selPlatforms, setSelPlatforms] = useState<Set<string>>(new Set());
-  const [minStars, setMinStars] = useState(0);
-  const [minScore, setMinScore] = useState(0);
   const [sort, setSort] = useState<SortKey>("stars");
   const [sortDesc, setSortDesc] = useState(true);
   const [filterPanel, setFilterPanel] = useState(false);
   const navigate = useNavigate();
   const profile = useApp((s) => s.profile);
   const extendedSorting = useApp((s) => s.settings.extendedSorting);
-  const loadSeq = useRef(0);
+  // Destructure: begin/isCurrent are stable callbacks (the wrapper object is not),
+  // so they are safe to key useCallback/useEffect dependencies on.
+  const { begin: beginQuery, isCurrent: isCurrentQuery } = useSequentialFetch();
+  const { begin: beginFacets, isCurrent: isCurrentFacets } = useSequentialFetch();
   // Render and query through effectiveSort: if extended sorting is switched
   // off while an extended sort is active, fall back to Rating (keeping the
   // chosen direction) without ever rendering a mismatched select.
   const effectiveSort = extendedSorting || !EXTENDED_SORTS.includes(sort) ? sort : "stars";
 
+  // The exact payload sent over IPC. Memoized (with the profile folded in, so
+  // a profile switch restarts the debounce like any other input) — its identity
+  // changes only when a query input actually changed.
+  const queryInput = useMemo(
+    () => ({
+      profileId: profile?.id,
+      q: {
+        search: search.trim() || undefined,
+        statuses: [...filters.statuses],
+        favouritesOnly: filters.favouritesOnly || undefined,
+        genres: [...filters.selGenres],
+        platforms: [...filters.selPlatforms],
+        minStars: filters.minStars > 0 ? filters.minStars : undefined,
+        minScore: filters.minScore > 0 ? filters.minScore : undefined,
+        sort: effectiveSort,
+        sortDesc,
+      } satisfies LibraryQuery,
+    }),
+    [profile, search, filters, effectiveSort, sortDesc],
+  );
+  // useDebouncedValue passes its first value straight through, so the chain
+  // starts at null and mirrors `queryInput` — that way the initial mount load
+  // waits out the same 200ms window as later edits, and every input change
+  // restarts the one pending timer (a burst of edits fires a single query).
+  const [queuedInput, setQueuedInput] = useState<typeof queryInput | null>(null);
+  useEffect(() => {
+    setQueuedInput(queryInput);
+  }, [queryInput]);
+  const debouncedInput = useDebouncedValue(queuedInput, 200);
+
   const load = useCallback(async () => {
-    const seq = ++loadSeq.current;
+    if (!debouncedInput) return;
+    const seq = beginQuery();
     setLoading(true);
-    const q: LibraryQuery = {
-      search: search.trim() || undefined,
-      statuses: [...statuses],
-      favouritesOnly: favouritesOnly || undefined,
-      genres: [...selGenres],
-      platforms: [...selPlatforms],
-      minStars: minStars > 0 ? minStars : undefined,
-      minScore: minScore > 0 ? minScore : undefined,
-      sort: effectiveSort,
-      sortDesc,
-    };
     try {
-      const result = await api.libraryQuery(q);
-      if (seq !== loadSeq.current) return; // a newer query superseded this one
+      const result = await api.libraryQuery(debouncedInput.q);
+      if (!isCurrentQuery(seq)) return; // a newer query superseded this one
       setEntries(result);
       setError(null);
     } catch (e) {
-      if (seq !== loadSeq.current) return;
+      if (!isCurrentQuery(seq)) return;
       setError(String(e));
     } finally {
-      if (seq === loadSeq.current) setLoading(false);
+      if (isCurrentQuery(seq)) setLoading(false);
     }
-  }, [
-    search,
-    statuses,
-    favouritesOnly,
-    selGenres,
-    selPlatforms,
-    minStars,
-    minScore,
-    effectiveSort,
-    sortDesc,
-  ]);
+  }, [beginQuery, isCurrentQuery, debouncedInput]);
 
   useEffect(() => {
-    const t = setTimeout(load, 200);
-    return () => clearTimeout(t);
-  }, [load, profile]);
+    void load();
+  }, [load]);
 
   // Keep the raw sort state honest once extended sorting is off.
   useEffect(() => {
     if (!extendedSorting && EXTENDED_SORTS.includes(sort)) setSort("stars");
   }, [extendedSorting, sort]);
 
+  // Genre/platform facet options describe the whole library, not the current
+  // filtered view, so they are loaded once per profile — refetching them
+  // whenever the row count changed (the old trigger) just re-queried identical
+  // data every time the page's own filters changed the count. Games added or
+  // removed on other pages remount this route, which reloads them.
   useEffect(() => {
-    let alive = true;
+    const seq = beginFacets();
     api
       .getGenresAndPlatforms()
       .then((info) => {
-        if (alive) {
+        if (isCurrentFacets(seq)) {
           setGenres(info.genres);
           setPlatforms(info.platforms);
         }
       })
       .catch(() => {}); // the filter panel just falls back to no options
-    return () => {
-      alive = false;
-    };
-  }, [profile, entries.length]);
+  }, [beginFacets, isCurrentFacets, profile]);
 
   const activeFilters =
-    statuses.size +
-    (favouritesOnly ? 1 : 0) +
-    selGenres.size +
-    selPlatforms.size +
-    (minStars > 0 ? 1 : 0) +
-    (minScore > 0 ? 1 : 0);
-
-  function toggle<T>(set: Set<T>, v: T): Set<T> {
-    const next = new Set(set);
-    if (next.has(v)) next.delete(v);
-    else next.add(v);
-    return next;
-  }
+    filters.statuses.size +
+    (filters.favouritesOnly ? 1 : 0) +
+    filters.selGenres.size +
+    filters.selPlatforms.size +
+    (filters.minStars > 0 ? 1 : 0) +
+    (filters.minScore > 0 ? 1 : 0);
 
   const totalPlaytime = useMemo(
     () => entries.reduce((sum, e) => sum + e.playtimeMinutes, 0),
@@ -203,19 +231,19 @@ export default function Library() {
                 <button
                   key={s}
                   className={`chip py-1.5 ${
-                    statuses.has(s)
+                    filters.statuses.has(s)
                       ? `${c.bg} ${c.text} ${c.border}`
                       : "bg-surface-800 text-slate-400 border-surface-600"
                   }`}
-                  onClick={() => setStatuses(toggle(statuses, s))}
+                  onClick={() => setFilters((f) => ({ ...f, statuses: toggleSet(f.statuses, s) }))}
                 >
                   {STATUS_LABELS[s]}
                 </button>
               );
             })}
             <button
-              className={`chip py-1.5 ${favouritesOnly ? "bg-rose-500/15 text-rose-300 border-rose-500/30" : "bg-surface-800 text-slate-400 border-surface-600"}`}
-              onClick={() => setFavouritesOnly(!favouritesOnly)}
+              className={`chip py-1.5 ${filters.favouritesOnly ? "bg-rose-500/15 text-rose-300 border-rose-500/30" : "bg-surface-800 text-slate-400 border-surface-600"}`}
+              onClick={() => setFilters((f) => ({ ...f, favouritesOnly: !f.favouritesOnly }))}
             >
               ♥ Favourites
             </button>
@@ -226,14 +254,18 @@ export default function Library() {
               <FilterGroup
                 title="Genres"
                 options={genres}
-                selected={selGenres}
-                onToggle={(g) => setSelGenres(toggle(selGenres, g))}
+                selected={filters.selGenres}
+                onToggle={(g) =>
+                  setFilters((f) => ({ ...f, selGenres: toggleSet(f.selGenres, g) }))
+                }
               />
               <FilterGroup
                 title="Platforms"
                 options={platforms}
-                selected={selPlatforms}
-                onToggle={(p) => setSelPlatforms(toggle(selPlatforms, p))}
+                selected={filters.selPlatforms}
+                onToggle={(p) =>
+                  setFilters((f) => ({ ...f, selPlatforms: toggleSet(f.selPlatforms, p) }))
+                }
               />
             </div>
           )}
@@ -241,43 +273,36 @@ export default function Library() {
           <div className="flex flex-wrap gap-8">
             <label className="text-xs text-slate-400">
               <div className="mb-1">
-                Min rating: <span className="text-slate-200">{minStars}</span>
+                Min rating: <span className="text-slate-200">{filters.minStars}</span>
               </div>
               <input
                 type="range"
                 min={0}
                 max={5}
                 step={0.5}
-                value={minStars}
-                onChange={(e) => setMinStars(Number(e.target.value))}
+                value={filters.minStars}
+                onChange={(e) => setFilters((f) => ({ ...f, minStars: Number(e.target.value) }))}
                 className="w-48 accent-accent-500 select-none"
               />
             </label>
             <label className="text-xs text-slate-400">
               <div className="mb-1">
-                Min detailed rating: <span className="text-slate-200">{minScore}</span>
+                Min detailed rating: <span className="text-slate-200">{filters.minScore}</span>
               </div>
               <input
                 type="range"
                 min={0}
                 max={100}
                 step={5}
-                value={minScore}
-                onChange={(e) => setMinScore(Number(e.target.value))}
+                value={filters.minScore}
+                onChange={(e) => setFilters((f) => ({ ...f, minScore: Number(e.target.value) }))}
                 className="w-48 accent-accent-500 select-none"
               />
             </label>
             {activeFilters > 0 && (
               <button
                 className="btn-ghost self-end text-xs"
-                onClick={() => {
-                  setStatuses(new Set());
-                  setFavouritesOnly(false);
-                  setSelGenres(new Set());
-                  setSelPlatforms(new Set());
-                  setMinStars(0);
-                  setMinScore(0);
-                }}
+                onClick={() => setFilters(makeDefaultFilters())}
               >
                 Clear all
               </button>

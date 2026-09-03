@@ -2,10 +2,16 @@ import { useState } from "react";
 import { api } from "../../api";
 import { useApp } from "../../store";
 import type { CategoryWeights, LibraryEntry } from "../../types";
-import { CATEGORIES, DEFAULT_WEIGHTS, type CategoryKey } from "../../types";
+import { DEFAULT_WEIGHTS } from "../../types";
 import CoverImage from "../CoverImage";
 import { Stars, StarPicker } from "../StarRating";
-import { divergenceText, scoreColor } from "../../lib/format";
+import CategoryScoreEditor, {
+  OverallScorePreview,
+  categoryScoresDirty,
+  categoryScoresOf,
+  type CategoryScores,
+} from "../CategoryScoreEditor";
+import { divergenceText } from "../../lib/format";
 import { computeWeightedOverall } from "../../lib/scoring";
 
 /**
@@ -27,12 +33,7 @@ export default function RerateRatingPanel({
   const weights: CategoryWeights = profile?.categoryWeights ?? DEFAULT_WEIGHTS;
 
   const [starDraft, setStarDraft] = useState<number | null>(entry.starRating);
-  const [catDraft, setCatDraft] = useState<Record<CategoryKey, number | null>>({
-    gameplay: entry.gameplay,
-    story: entry.story,
-    music: entry.music,
-    technical: entry.technical,
-  });
+  const [catDraft, setCatDraft] = useState<CategoryScores>(() => categoryScoresOf(entry));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,12 +47,7 @@ export default function RerateRatingPanel({
       if (starDraft !== entry.starRating) {
         updated = await api.setStarRating(entry.id, starDraft);
       }
-      if (
-        catDraft.gameplay !== entry.gameplay ||
-        catDraft.story !== entry.story ||
-        catDraft.music !== entry.music ||
-        catDraft.technical !== entry.technical
-      ) {
+      if (categoryScoresDirty(catDraft, entry)) {
         updated = await api.setCategoryScores(entry.id, catDraft);
       }
       await api.markRerated(entry.id);
@@ -109,49 +105,19 @@ export default function RerateRatingPanel({
           <span className="text-[11px] text-slate-500">per-category, 0–100</span>
         </div>
         <div className="space-y-4">
-          {CATEGORIES.map(({ key, label }) => (
-            <div key={key}>
-              <div className="flex justify-between gap-3 text-xs mb-1">
-                <span className="text-slate-300 min-w-0 truncate">
-                  {label}
-                  <span className="text-slate-500">
-                    {" "}
-                    ({weights[key].toFixed(0)}%){entry[key] != null && <> · was {entry[key]}</>}
-                  </span>
-                </span>
-                <span className="font-mono text-slate-400 shrink-0">{catDraft[key] ?? "—"}</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={catDraft[key] ?? 50}
-                onChange={(e) => setCatDraft({ ...catDraft, [key]: Number(e.target.value) })}
-                className={`w-full select-none ${
-                  catDraft[key] != null ? "accent-accent-500" : "accent-surface-600"
-                }`}
-              />
-            </div>
-          ))}
+          <CategoryScoreEditor
+            scores={catDraft}
+            onChange={setCatDraft}
+            weights={weights}
+            previous={categoryScoresOf(entry)}
+          />
         </div>
         <div className="mt-4 pt-4 border-t border-surface-700 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <div>
             <div className="text-[11px] text-slate-500 uppercase tracking-wide">
               Overall (weighted)
             </div>
-            <div className="flex items-baseline gap-2">
-              <span
-                className={`text-3xl font-bold ${preview != null ? scoreColor(preview) : "text-slate-600"}`}
-              >
-                {preview != null ? preview.toFixed(1) : "—"}
-              </span>
-              {entry.computedOverall != null && (
-                <span className="text-xs text-slate-500">
-                  was {entry.computedOverall.toFixed(1)}
-                </span>
-              )}
-            </div>
+            <OverallScorePreview value={preview} was={entry.computedOverall} />
           </div>
           {starDraft != null && preview != null && (
             <p className="text-xs text-slate-500 max-w-[260px] text-right">

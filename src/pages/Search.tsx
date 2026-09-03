@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import type { CachedGame, PlayStatus, SearchOutcome } from "../types";
-import { STATUSES, STATUS_LABELS } from "../types";
-import CoverImage from "../components/CoverImage";
 import FilterGroup from "../components/FilterGroup";
 import MixBar from "../components/MixBar";
+import SearchResultCard from "../components/SearchResultCard";
 import {
   PRESET_LABELS,
   RANK_PRESETS,
@@ -13,6 +12,9 @@ import {
   type RankPreset,
   type RankWeights,
 } from "../lib/searchRank";
+import { toggleSet } from "../lib/sets";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { useSequentialFetch } from "../hooks/useSequentialFetch";
 import { useApp } from "../store";
 
 const YEAR_OPTIONS: number[] = [];
@@ -44,52 +46,88 @@ export default function Search() {
   const [hideAdditions, setHideAdditions] = useState(true);
   const navigate = useNavigate();
   const hasApiKey = useApp((s) => s.hasApiKey);
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const searchSeq = useRef(0);
+  const profile = useApp((s) => s.profile);
+  // One guard for the searches themselves, one for the added-set loads, so a
+  // library refresh can never invalidate an in-flight search (or vice versa).
+  // Destructure: begin/isCurrent are stable callbacks (the wrapper object is
+  // not), so they are safe to key useCallback dependencies on.
+  const { begin: beginSearch, isCurrent: isCurrentSearch } = useSequentialFetch();
+  const { begin: beginAdded, isCurrent: isCurrentAdded } = useSequentialFetch();
 
-  const runSearch = useCallback(async (q: string, fromY: string, toY: string, hide: boolean) => {
-    const seq = ++searchSeq.current;
-    setLoading(true);
-    setError(null);
+  const runSearch = useCallback(
+    async (q: string, fromY: string, toY: string, hide: boolean) => {
+      const seq = beginSearch();
+      setLoading(true);
+      setError(null);
+      try {
+        const out = await api.searchGames(q, {
+          filters: {
+            fromYear: fromY ? Number(fromY) : undefined,
+            toYear: toY ? Number(toY) : undefined,
+            excludeAdditions: hide,
+          },
+        });
+        if (!isCurrentSearch(seq)) return; // a newer search superseded this one
+        setOutcome(out);
+      } catch (e) {
+        if (!isCurrentSearch(seq)) return;
+        setError(String(e));
+        setOutcome(null);
+      } finally {
+        if (isCurrentSearch(seq)) setLoading(false);
+      }
+    },
+    [beginSearch, isCurrentSearch],
+  );
+
+  // Reflect what's already owned so cards show "In your library" even after an
+  // app restart. Loaded once on mount (and again if the profile changes), plus
+  // re-synced after a successful add — not after every search like before.
+  const loadAdded = useCallback(async () => {
+    const seq = beginAdded();
     try {
-      const out = await api.searchGames(q, {
-        filters: {
-          fromYear: fromY ? Number(fromY) : undefined,
-          toYear: toY ? Number(toY) : undefined,
-          excludeAdditions: hide,
-        },
+      const entries = await api.libraryQuery({});
+      if (!isCurrentAdded(seq)) return;
+      // Merge rather than replace so a concurrent response can never drop a
+      // chip we just set optimistically in add().
+      setAdded((prev) => {
+        const next = new Set(prev);
+        for (const e of entries) next.add(e.rawgId);
+        return next;
       });
-      if (seq !== searchSeq.current) return; // a newer search superseded this one
-      setOutcome(out);
-      // Reflect what's already owned so cards show "In your library"
-      // even after an app restart.
-      api
-        .libraryQuery({})
-        .then((entries) => setAdded(new Set(entries.map((e) => e.rawgId))))
-        .catch(() => {});
-    } catch (e) {
-      if (seq !== searchSeq.current) return;
-      setError(String(e));
-      setOutcome(null);
-    } finally {
-      if (seq === searchSeq.current) setLoading(false);
+    } catch {
+      // the chips just keep whatever we already know
     }
-  }, []);
+  }, [beginAdded, isCurrentAdded]);
 
   useEffect(() => {
-    if (debounce.current) clearTimeout(debounce.current);
-    if (!query.trim()) {
+    void loadAdded();
+  }, [loadAdded, profile]);
+
+  // One debounce drives the whole query: typing, the year range and the DLC
+  // toggle all restart the same 350ms timer, so a burst of edits fires exactly
+  // one search (memoized bundle — a fresh object per render would never settle).
+  const searchInput = useMemo(
+    () => ({ query, fromYear, toYear, hideAdditions }),
+    [query, fromYear, toYear, hideAdditions],
+  );
+  const debouncedInput = useDebouncedValue(searchInput, 350);
+  // Page policy: emptying the input clears results immediately instead of
+  // waiting out the debounce (and never searches for whitespace).
+  const effectiveQuery = query.trim() ? debouncedInput.query.trim() : "";
+
+  useEffect(() => {
+    if (!effectiveQuery) {
       setOutcome(null);
       return;
     }
-    debounce.current = setTimeout(
-      () => runSearch(query.trim(), fromYear, toYear, hideAdditions),
-      350,
+    void runSearch(
+      effectiveQuery,
+      debouncedInput.fromYear,
+      debouncedInput.toYear,
+      debouncedInput.hideAdditions,
     );
-    return () => {
-      if (debounce.current) clearTimeout(debounce.current);
-    };
-  }, [query, fromYear, toYear, hideAdditions, runSearch]);
+  }, [effectiveQuery, debouncedInput, runSearch]);
 
   async function add(game: CachedGame, status: PlayStatus) {
     setAdding(game.rawgId);
@@ -99,6 +137,7 @@ export default function Search() {
       const entry = await api.addToLibrary(game, status);
       setAdded((prev) => new Set(prev).add(game.rawgId));
       setRatePrompt({ rawgId: game.rawgId, entryId: entry.id });
+      void loadAdded(); // re-sync with the library after the change
     } catch (e) {
       setError(String(e));
     } finally {
@@ -107,7 +146,12 @@ export default function Search() {
   }
 
   const pool = outcome?.games ?? [];
-  const weights = preset === "custom" ? customWeights : RANK_PRESETS[preset];
+  // Memoized so the identity only changes when a weight or preset actually
+  // changes, letting the results memo below depend on the object itself.
+  const weights = useMemo<RankWeights>(
+    () => (preset === "custom" ? customWeights : RANK_PRESETS[preset]),
+    [preset, customWeights],
+  );
   const results = useMemo(() => {
     const byGenre = selGenres.size
       ? pool.filter((g) => g.genres.some((x) => selGenres.has(x)))
@@ -116,9 +160,7 @@ export default function Search() {
       ? byGenre.filter((g) => g.platforms.some((x) => selPlatforms.has(x)))
       : byGenre;
     return rankGames(byPlatform, query.trim(), weights);
-    // weights is a fresh object in custom mode per render; key on its values
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pool, query, selGenres, selPlatforms, weights.text, weights.popularity, weights.recency]);
+  }, [pool, query, selGenres, selPlatforms, weights]);
 
   const genreOptions = useMemo(() => [...new Set(pool.flatMap((g) => g.genres))].sort(), [pool]);
   const platformOptions = useMemo(
@@ -127,13 +169,6 @@ export default function Search() {
   );
 
   const activeFilters = selGenres.size + selPlatforms.size + (fromYear ? 1 : 0) + (toYear ? 1 : 0);
-
-  function toggle<T>(set: Set<T>, v: T): Set<T> {
-    const next = new Set(set);
-    if (next.has(v)) next.delete(v);
-    else next.add(v);
-    return next;
-  }
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
@@ -272,13 +307,13 @@ export default function Search() {
                 title="Genres"
                 options={genreOptions}
                 selected={selGenres}
-                onToggle={(g) => setSelGenres(toggle(selGenres, g))}
+                onToggle={(g) => setSelGenres(toggleSet(selGenres, g))}
               />
               <FilterGroup
                 title="Platforms"
                 options={platformOptions}
                 selected={selPlatforms}
-                onToggle={(p) => setSelPlatforms(toggle(selPlatforms, p))}
+                onToggle={(p) => setSelPlatforms(toggleSet(selPlatforms, p))}
               />
             </div>
           )}
@@ -310,78 +345,19 @@ export default function Search() {
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-2">
         {results.map((g) => (
-          <div key={g.rawgId} className="card overflow-hidden relative group">
-            <div className="aspect-[16/9] overflow-hidden">
-              <CoverImage url={g.coverUrl} alt={g.name} className="w-full h-full object-cover" />
-            </div>
-            <div className="p-3">
-              <h3 className="font-medium text-sm text-slate-100 truncate" title={g.name}>
-                {g.name}
-              </h3>
-              <p className="text-[11px] text-slate-500 mt-0.5 truncate">
-                {[
-                  g.releaseDate?.split("-")[0],
-                  g.developer,
-                  ...g.genres.slice(0, 2),
-                  g.metacritic != null ? `MC ${g.metacritic}` : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-
-              {added.has(g.rawgId) ? (
-                ratePrompt?.rawgId === g.rawgId ? (
-                  <div className="mt-3 space-y-1.5">
-                    <p className="text-xs text-slate-400 text-center">Rate it now?</p>
-                    <div className="flex gap-1.5">
-                      <button
-                        className="btn-primary flex-1 !py-1.5 !text-xs"
-                        onClick={() => navigate(`/game/${ratePrompt.entryId}`)}
-                      >
-                        Rate now
-                      </button>
-                      <button
-                        className="btn-ghost flex-1 !py-1.5 !text-xs"
-                        onClick={() => setRatePrompt(null)}
-                      >
-                        Later
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    className="btn-ghost w-full mt-3 !text-emerald-400"
-                    onClick={() => navigate("/library")}
-                  >
-                    ✓ In your library — view
-                  </button>
-                )
-              ) : (
-                <div className="relative mt-3">
-                  <button
-                    className="btn-primary w-full"
-                    disabled={adding === g.rawgId}
-                    onClick={() => setDropdown(dropdown === g.rawgId ? null : g.rawgId)}
-                  >
-                    {adding === g.rawgId ? "Adding…" : "+ Add to library"}
-                  </button>
-                  {dropdown === g.rawgId && (
-                    <div className="absolute bottom-full mb-1 left-0 right-0 card overflow-hidden z-10 shadow-xl">
-                      {STATUSES.map((s) => (
-                        <button
-                          key={s}
-                          className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-surface-800"
-                          onClick={() => add(g, s)}
-                        >
-                          {STATUS_LABELS[s]}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+          <SearchResultCard
+            key={g.rawgId}
+            game={g}
+            inLibrary={added.has(g.rawgId)}
+            adding={adding === g.rawgId}
+            dropdownOpen={dropdown === g.rawgId}
+            ratePrompt={ratePrompt?.rawgId === g.rawgId}
+            onToggleDropdown={() => setDropdown(dropdown === g.rawgId ? null : g.rawgId)}
+            onAdd={(status) => void add(g, status)}
+            onRateNow={() => ratePrompt && navigate(`/game/${ratePrompt.entryId}`)}
+            onRateLater={() => setRatePrompt(null)}
+            onOpenLibrary={() => navigate("/library")}
+          />
         ))}
       </div>
     </div>

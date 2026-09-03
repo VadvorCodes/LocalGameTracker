@@ -1,13 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Bar,
-  BarChart,
-  CartesianGrid,
   Cell,
-  Legend,
   Line,
-  LineChart,
   PolarAngleAxis,
   PolarGrid,
   PolarRadiusAxis,
@@ -15,16 +11,15 @@ import {
   RadarChart,
   ResponsiveContainer,
   Tooltip,
-  XAxis,
-  YAxis,
 } from "recharts";
 import { api } from "../api";
 import type { Analytics, MiniEntry, RatingMode } from "../types";
 import { STATUSES, STATUS_COLORS, STATUS_LABELS } from "../types";
+import ChartFrame, { useChartPalette } from "../components/dashboard/ChartFrame";
 import CoverImage from "../components/CoverImage";
 import { Stars } from "../components/StarRating";
-import { cssColor, themeVars } from "../lib/themes";
 import { formatPlaytime, scoreColor } from "../lib/format";
+import { useSequentialFetch } from "../hooks/useSequentialFetch";
 import { useApp } from "../store";
 
 const RATING_MODES: { key: RatingMode; label: string }[] = [
@@ -34,38 +29,40 @@ const RATING_MODES: { key: RatingMode; label: string }[] = [
 ];
 
 export default function Dashboard() {
-  const [a, setA] = useState<Analytics | null>(null);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [ratingMode, setRatingMode] = useState<RatingMode>("both");
   const navigate = useNavigate();
   const profile = useApp((s) => s.profile);
-  const settings = useApp((s) => s.settings);
+  // Series colours from the active theme; ChartFrame derives its own via
+  // useChartPalette for the axis/tooltip/grid boilerplate.
+  const palette = useChartPalette();
+  const { begin, isCurrent } = useSequentialFetch();
 
-  // Chart colours derived from the active preset (not getComputedStyle — that
-  // races applyTheme's DOM write and lags one render behind a theme switch).
-  const palette = useMemo(() => {
-    const vars = themeVars(settings.theme, settings.customTheme);
-    return {
-      accent: cssColor(vars, "--accent-500"),
-      grid: cssColor(vars, "--surface-700"),
-      polarGrid: cssColor(vars, "--surface-600"),
-      tooltipBg: cssColor(vars, "--surface-800"),
-      tooltipBorder: cssColor(vars, "--surface-600"),
-    };
-  }, [settings.theme, settings.customTheme]);
-
-  const tooltipStyle = {
-    background: palette.tooltipBg,
-    border: `1px solid ${palette.tooltipBorder}`,
-    borderRadius: 8,
-    fontSize: 12,
-    color: "#e2e8f0",
-  };
+  const loadAnalytics = useCallback(async () => {
+    const seq = begin();
+    setError(null);
+    try {
+      const data = await api.getAnalytics(ratingMode);
+      if (isCurrent(seq)) setAnalytics(data);
+    } catch (e) {
+      if (isCurrent(seq)) setError(String(e));
+    }
+  }, [begin, isCurrent, ratingMode]);
 
   useEffect(() => {
-    api.getAnalytics(ratingMode).then(setA).catch(console.error);
-  }, [profile, ratingMode]);
+    void loadAnalytics();
+  }, [loadAnalytics, profile]);
 
-  if (!a) {
+  if (!analytics) {
+    if (error) {
+      return (
+        <div className="p-8 max-w-6xl mx-auto space-y-6">
+          <h1 className="text-xl font-semibold text-white">My gaming dashboard</h1>
+          <ErrorBanner message={error} onRetry={loadAnalytics} />
+        </div>
+      );
+    }
     return (
       <div className="p-8 max-w-6xl mx-auto space-y-4 animate-pulse">
         <div className="h-8 w-48 bg-surface-800 rounded" />
@@ -78,7 +75,7 @@ export default function Dashboard() {
     );
   }
 
-  const hasRatings = a.avgOverall != null || a.avgStars != null;
+  const hasRatings = analytics.avgOverall != null || analytics.avgStars != null;
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-8">
@@ -86,15 +83,18 @@ export default function Dashboard() {
         <h1 className="text-xl font-semibold text-white">My gaming dashboard</h1>
       </div>
 
+      {/* a background refresh (rating-mode switch) failed; keep the stale data visible */}
+      {error && <ErrorBanner message={error} onRetry={loadAnalytics} />}
+
       {/* headline stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Stat label="Games tracked" value={String(a.totalGames)} />
-        <Stat label="Favourites" value={String(a.favourites)} />
-        <Stat label="Total playtime" value={formatPlaytime(a.totalPlaytimeMinutes)} />
+        <Stat label="Games tracked" value={String(analytics.totalGames)} />
+        <Stat label="Favourites" value={String(analytics.favourites)} />
+        <Stat label="Total playtime" value={formatPlaytime(analytics.totalPlaytimeMinutes)} />
         <Stat
           label="Avg detailed score"
-          value={a.avgOverall != null ? `${a.avgOverall.toFixed(1)} / 100` : "—"}
-          accent={a.avgOverall != null ? scoreColor(a.avgOverall) : undefined}
+          value={analytics.avgOverall != null ? `${analytics.avgOverall.toFixed(1)} / 100` : "—"}
+          accent={analytics.avgOverall != null ? scoreColor(analytics.avgOverall) : undefined}
         />
       </div>
 
@@ -103,8 +103,8 @@ export default function Dashboard() {
         <Panel title="Play status">
           <div className="space-y-2">
             {STATUSES.map((s) => {
-              const count = a.statusCounts.find((x) => x.status === s)?.count ?? 0;
-              const pct = a.totalGames > 0 ? (count / a.totalGames) * 100 : 0;
+              const count = analytics.statusCounts.find((x) => x.status === s)?.count ?? 0;
+              const pct = analytics.totalGames > 0 ? (count / analytics.totalGames) * 100 : 0;
               return (
                 <div key={s} className="flex items-center gap-3">
                   <span className="text-xs text-slate-400 w-24 shrink-0">{STATUS_LABELS[s]}</span>
@@ -119,22 +119,17 @@ export default function Dashboard() {
         </Panel>
 
         <Panel title="Star rating distribution">
-          {a.starDistribution.some((d) => d.y > 0) ? (
-            <ChartWrap>
-              <BarChart data={a.starDistribution}>
-                <XAxis dataKey="x" tick={{ fill: "#64748b", fontSize: 11 }} />
-                <YAxis allowDecimals={false} tick={{ fill: "#64748b", fontSize: 11 }} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Bar dataKey="y" radius={[4, 4, 0, 0]}>
-                  {a.starDistribution.map((d) => (
-                    <Cell
-                      key={d.x}
-                      fill={d.x >= 3.5 ? "#34d399" : d.x >= 2 ? "#fbbf24" : "#fb7185"}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ChartWrap>
+          {analytics.starDistribution.some((d) => d.y > 0) ? (
+            <ChartFrame kind="bar" data={analytics.starDistribution} xKey="x" yWholeNumbers>
+              <Bar dataKey="y" radius={[4, 4, 0, 0]}>
+                {analytics.starDistribution.map((d) => (
+                  <Cell
+                    key={d.x}
+                    fill={d.x >= 3.5 ? "#34d399" : d.x >= 2 ? "#fbbf24" : "#fb7185"}
+                  />
+                ))}
+              </Bar>
+            </ChartFrame>
           ) : (
             <Empty text="No star ratings yet." />
           )}
@@ -151,96 +146,100 @@ export default function Dashboard() {
       )}
 
       {/* category radar */}
-      {hasRatings && (a.categoryAverages.gameplay != null || a.categoryAverages.story != null) && (
-        <div className="grid md:grid-cols-2 gap-4">
-          <Panel title="Category Profile">
-            <ChartWrap>
-              <RadarChart
-                data={[
-                  { cat: "Gameplay", v: a.categoryAverages.gameplay ?? 0 },
-                  { cat: "Story", v: a.categoryAverages.story ?? 0 },
-                  { cat: "Music", v: a.categoryAverages.music ?? 0 },
-                  { cat: "Technical", v: a.categoryAverages.technical ?? 0 },
-                ]}
-                outerRadius="70%"
-              >
-                <PolarGrid stroke={palette.polarGrid} />
-                <PolarAngleAxis dataKey="cat" tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                <PolarRadiusAxis domain={[0, 100]} tick={{ fill: "#475569", fontSize: 10 }} />
-                <Radar
-                  dataKey="v"
-                  name="Average"
-                  stroke={palette.accent}
-                  fill={palette.accent}
-                  fillOpacity={0.35}
-                />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  formatter={(value) => Number(value).toFixed(1)}
-                />
-              </RadarChart>
-            </ChartWrap>
-          </Panel>
+      {hasRatings &&
+        (analytics.categoryAverages.gameplay != null ||
+          analytics.categoryAverages.story != null) && (
+          <div className="grid md:grid-cols-2 gap-4">
+            <Panel title="Category Profile">
+              <ResponsiveContainer width="100%" height={220}>
+                <RadarChart
+                  data={[
+                    { cat: "Gameplay", v: analytics.categoryAverages.gameplay ?? 0 },
+                    { cat: "Story", v: analytics.categoryAverages.story ?? 0 },
+                    { cat: "Music", v: analytics.categoryAverages.music ?? 0 },
+                    { cat: "Technical", v: analytics.categoryAverages.technical ?? 0 },
+                  ]}
+                  outerRadius="70%"
+                >
+                  <PolarGrid stroke={palette.polarGrid} />
+                  <PolarAngleAxis dataKey="cat" tick={{ fill: "#94a3b8", fontSize: 12 }} />
+                  <PolarRadiusAxis domain={[0, 100]} tick={{ fill: "#475569", fontSize: 10 }} />
+                  <Radar
+                    dataKey="v"
+                    name="Average"
+                    stroke={palette.accent}
+                    fill={palette.accent}
+                    fillOpacity={0.35}
+                  />
+                  <Tooltip
+                    contentStyle={palette.tooltipStyle}
+                    formatter={(value) => Number(value).toFixed(1)}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
+            </Panel>
 
-          <Panel title="Detailed score distribution">
-            {a.scoreDistribution.some((d) => d.y > 0) ? (
-              <ChartWrap>
-                <BarChart data={a.scoreDistribution}>
-                  <XAxis dataKey="x" tick={{ fill: "#64748b", fontSize: 10 }} interval={1} />
-                  <YAxis allowDecimals={false} tick={{ fill: "#64748b", fontSize: 11 }} />
-                  <Tooltip contentStyle={tooltipStyle} />
+            <Panel title="Detailed score distribution">
+              {analytics.scoreDistribution.some((d) => d.y > 0) ? (
+                <ChartFrame
+                  kind="bar"
+                  data={analytics.scoreDistribution}
+                  xKey="x"
+                  xTickFontSize={10}
+                  xInterval={1}
+                  yWholeNumbers
+                >
                   <Bar dataKey="y" fill={palette.accent} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ChartWrap>
-            ) : (
-              <Empty text="No detailed scores yet." />
-            )}
-          </Panel>
-        </div>
-      )}
+                </ChartFrame>
+              ) : (
+                <Empty text="No detailed scores yet." />
+              )}
+            </Panel>
+          </div>
+        )}
 
       {/* trends */}
-      {a.ratingTrend.length >= 2 && (
+      {analytics.ratingTrend.length >= 2 && (
         <div className="grid md:grid-cols-2 gap-4">
           <Panel title="Rating trend — how your standards move">
-            <ChartWrap>
-              <LineChart data={a.ratingTrend}>
-                <CartesianGrid stroke={palette.grid} />
-                <XAxis dataKey="month" tick={{ fill: "#64748b", fontSize: 11 }} />
-                <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 11 }} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Line
-                  type="monotone"
-                  dataKey="avgOverall"
-                  name="Detailed (0-100)"
-                  stroke={palette.accent}
-                  dot
-                />
-                <Line type="monotone" dataKey="avgStars" name="Stars (×20)" stroke="#fbbf24" dot />
-              </LineChart>
-            </ChartWrap>
+            <ChartFrame
+              kind="line"
+              data={analytics.ratingTrend}
+              xKey="month"
+              yDomain={[0, 100]}
+              grid
+              legend
+            >
+              <Line
+                type="monotone"
+                dataKey="avgOverall"
+                name="Detailed (0-100)"
+                stroke={palette.accent}
+                dot
+              />
+              <Line type="monotone" dataKey="avgStars" name="Stars (×20)" stroke="#fbbf24" dot />
+            </ChartFrame>
           </Panel>
           <Panel title="Category trends — how your taste evolves">
-            <ChartWrap>
-              <LineChart data={a.categoryTrend}>
-                <CartesianGrid stroke={palette.grid} />
-                <XAxis dataKey="month" tick={{ fill: "#64748b", fontSize: 11 }} />
-                <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 11 }} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Line type="monotone" dataKey="gameplay" stroke={palette.accent} dot={false} />
-                <Line type="monotone" dataKey="story" stroke="#34d399" dot={false} />
-                <Line type="monotone" dataKey="music" stroke="#fbbf24" dot={false} />
-                <Line type="monotone" dataKey="technical" stroke="#fb7185" dot={false} />
-              </LineChart>
-            </ChartWrap>
+            <ChartFrame
+              kind="line"
+              data={analytics.categoryTrend}
+              xKey="month"
+              yDomain={[0, 100]}
+              grid
+              legend
+            >
+              <Line type="monotone" dataKey="gameplay" stroke={palette.accent} dot={false} />
+              <Line type="monotone" dataKey="story" stroke="#34d399" dot={false} />
+              <Line type="monotone" dataKey="music" stroke="#fbbf24" dot={false} />
+              <Line type="monotone" dataKey="technical" stroke="#fb7185" dot={false} />
+            </ChartFrame>
           </Panel>
         </div>
       )}
 
       {/* first vs recent shift */}
-      {a.firstVsRecent && (
+      {analytics.firstVsRecent && (
         <Panel title="Then vs Now">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {(
@@ -251,8 +250,8 @@ export default function Dashboard() {
                 ["Technical", "technical"],
               ] as const
             ).map(([label, key]) => {
-              const first = a.firstVsRecent!.firstQuartile[key];
-              const recent = a.firstVsRecent!.recentQuartile[key];
+              const first = analytics.firstVsRecent!.firstQuartile[key];
+              const recent = analytics.firstVsRecent!.recentQuartile[key];
               const delta = first != null && recent != null ? recent - first : null;
               return (
                 <div key={key} className="bg-surface-800/50 rounded-xl p-4 text-center">
@@ -283,20 +282,20 @@ export default function Dashboard() {
       )}
 
       {/* genre breakdown + recently rated */}
-      {(a.genreBreakdown.length > 0 || a.recentlyRated.length > 0) && (
+      {(analytics.genreBreakdown.length > 0 || analytics.recentlyRated.length > 0) && (
         <div className="grid md:grid-cols-2 gap-4">
           <Panel title="Genres you play (top 10)">
-            <BreakdownTable rows={a.genreBreakdown} />
+            <BreakdownTable rows={analytics.genreBreakdown} />
           </Panel>
           <Panel title="Recently rated">
             <p className="text-xs text-slate-500 mb-3">Your three latest rated games.</p>
-            <MiniList entries={a.recentlyRated} onOpen={(id) => navigate(`/game/${id}`)} />
+            <MiniList entries={analytics.recentlyRated} onOpen={(id) => navigate(`/game/${id}`)} />
           </Panel>
         </div>
       )}
 
       {/* extremes + divergence */}
-      {(a.highestRated.length > 0 || a.lowestRated.length > 0) && (
+      {(analytics.highestRated.length > 0 || analytics.lowestRated.length > 0) && (
         <div className="grid md:grid-cols-2 gap-4">
           <Panel
             title="Highest rated"
@@ -320,7 +319,7 @@ export default function Dashboard() {
             }
           >
             <MiniList
-              entries={a.highestRated}
+              entries={analytics.highestRated}
               onOpen={(id) => navigate(`/game/${id}`)}
               mode={ratingMode}
             />
@@ -338,7 +337,7 @@ export default function Dashboard() {
             }
           >
             <MiniList
-              entries={a.lowestRated}
+              entries={analytics.lowestRated}
               onOpen={(id) => navigate(`/game/${id}`)}
               mode={ratingMode}
             />
@@ -346,19 +345,25 @@ export default function Dashboard() {
         </div>
       )}
 
-      {(a.gutFeelingGames.length > 0 || a.onReflectionGames.length > 0) && (
+      {(analytics.gutFeelingGames.length > 0 || analytics.onReflectionGames.length > 0) && (
         <div className="grid md:grid-cols-2 gap-4">
           <Panel title="♥ Gut-feeling picks — loved more than their parts">
             <p className="text-xs text-slate-500 mb-3">
               Star rating exceeds the detailed score by 15+ points.
             </p>
-            <MiniList entries={a.gutFeelingGames} onOpen={(id) => navigate(`/game/${id}`)} />
+            <MiniList
+              entries={analytics.gutFeelingGames}
+              onOpen={(id) => navigate(`/game/${id}`)}
+            />
           </Panel>
           <Panel title="🧠 On-reflection picks — better than they felt">
             <p className="text-xs text-slate-500 mb-3">
               Detailed score exceeds the star rating by 15+ points.
             </p>
-            <MiniList entries={a.onReflectionGames} onOpen={(id) => navigate(`/game/${id}`)} />
+            <MiniList
+              entries={analytics.onReflectionGames}
+              onOpen={(id) => navigate(`/game/${id}`)}
+            />
           </Panel>
         </div>
       )}
@@ -366,11 +371,18 @@ export default function Dashboard() {
   );
 }
 
-function ChartWrap({ children }: { children: React.ReactElement }) {
+/** Chip-style load-failure banner (matches Library/Search) with a retry button. */
+function ErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      {children}
-    </ResponsiveContainer>
+    <div className="chip bg-rose-500/10 text-rose-300 border-rose-500/30 py-1.5 flex items-center justify-between gap-3">
+      <span>Could not load analytics: {message}</span>
+      <button
+        className="chip bg-surface-800 text-slate-300 border-surface-600 hover:text-white"
+        onClick={onRetry}
+      >
+        Retry
+      </button>
+    </div>
   );
 }
 

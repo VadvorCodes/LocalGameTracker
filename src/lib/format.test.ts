@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { divergenceText, formatDate, formatPlaytime, scoreColor } from "./format";
+import { divergenceText, formatDate, formatPlaytime, metaLine, scoreColor } from "./format";
 
 describe("formatPlaytime", () => {
   it("formats zero and negative as 0h", () => {
@@ -96,5 +96,21 @@ describe("divergenceText", () => {
     expect(divergenceText(4, 70)).toBe(
       "Your star rating and detailed score agree — a settled opinion.",
     );
+  });
+});
+
+describe("metaLine", () => {
+  it("joins the defined parts with middots", () => {
+    expect(metaLine("Team Cherry", "Feb 2017", "Metroidvania", "Action")).toBe(
+      "Team Cherry · Feb 2017 · Metroidvania · Action",
+    );
+  });
+
+  it("drops null, undefined and empty parts", () => {
+    expect(metaLine(null, "Solo", undefined, "", "Roguelike")).toBe("Solo · Roguelike");
+  });
+
+  it("returns an empty string when no part is defined", () => {
+    expect(metaLine(null, undefined, "")).toBe("");
   });
 });
