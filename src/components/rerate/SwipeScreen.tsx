@@ -66,56 +66,59 @@ export default function SwipeScreen({
         })}
       </div>
 
-      <div className="relative flex-1 flex flex-col items-center justify-center gap-5 px-6 min-h-0 overflow-y-auto">
-        <SwipeCard
-          key={item.entry.id}
-          item={item}
-          exitRequest={cycle.exitRequest}
-          onDecided={(d) => dispatch({ type: "cardDecided", decision: d })}
-          onDragX={(x) => dispatch({ type: "dragXChanged", x })}
-        />
-
-        <p className="text-xs text-slate-500 text-center">
-          Drag the card left to re-rate it, right to keep its rating — or use the buttons / arrow
-          keys.
-        </p>
-
-        <div
-          className="flex gap-8 items-start transition-opacity duration-150"
-          style={{ opacity: cycle.dragX !== 0 ? 0 : 1 }}
-        >
-          <DecisionButton
-            kind="rerate"
-            label="✕ Re-rate"
-            previous={cycle.previousDecisions[item.entry.id]}
-            showIndicator={cycle.revisiting}
-            onClick={() => requestDecision("rerate")}
+      {/* my-auto (not justify-center) so an overflowing small window can
+          still scroll to every part of the card instead of clipping. */}
+      <div className="relative flex-1 flex flex-col items-center px-6 min-h-0 overflow-y-auto">
+        <div className="my-auto flex w-full flex-col items-center gap-5 py-6">
+          <SwipeCard
+            key={item.entry.id}
+            item={item}
+            exitRequest={cycle.exitRequest}
+            onDecided={(d) => dispatch({ type: "cardDecided", decision: d })}
+            onDragX={(x) => dispatch({ type: "dragXChanged", x })}
           />
-          <DecisionButton
-            kind="keep"
-            label="✓ Keep rating"
-            previous={cycle.previousDecisions[item.entry.id]}
-            showIndicator={cycle.revisiting}
-            onClick={() => requestDecision("keep")}
-          />
-        </div>
 
-        <div
-          className="transition-opacity duration-150"
-          style={{ opacity: cycle.dragX !== 0 ? 0 : 1 }}
-        >
-          {item.similar.length > 0 && (
-            <div className="max-w-3xl">
-              <h3 className="text-[11px] uppercase tracking-wide text-slate-500 mb-2 text-center">
-                Closest genre matches in your library
-              </h3>
-              <div className="flex gap-3 justify-center">
-                {item.similar.map((s) => (
-                  <MatchCard key={s.id} entry={s} />
-                ))}
+          <p className="text-xs text-slate-500 text-center">
+            Drag the card left to re-rate it, right to keep its rating — or use the arrow keys.
+          </p>
+
+          <div
+            className="flex gap-8 items-start transition-opacity duration-150"
+            style={{ opacity: cycle.dragX !== 0 ? 0 : 1 }}
+          >
+            <DecisionButton
+              kind="rerate"
+              label="✕ Re-rate"
+              previous={cycle.previousDecisions[item.entry.id]}
+              showIndicator={cycle.revisiting}
+              onClick={() => requestDecision("rerate")}
+            />
+            <DecisionButton
+              kind="keep"
+              label="✓ Keep rating"
+              previous={cycle.previousDecisions[item.entry.id]}
+              showIndicator={cycle.revisiting}
+              onClick={() => requestDecision("keep")}
+            />
+          </div>
+
+          <div
+            className="transition-opacity duration-150"
+            style={{ opacity: cycle.dragX !== 0 ? 0 : 1 }}
+          >
+            {item.similar.length > 0 && (
+              <div className="max-w-3xl">
+                <h3 className="text-[11px] uppercase tracking-wide text-slate-500 mb-2 text-center">
+                  Closest genre matches in your library
+                </h3>
+                <div className="flex gap-3 justify-center">
+                  {item.similar.map((s) => (
+                    <MatchCard key={s.id} entry={s} />
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>

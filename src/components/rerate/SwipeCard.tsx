@@ -92,7 +92,9 @@ export default function SwipeCard({
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
     >
-      <div className="relative aspect-[16/9] overflow-hidden">
+      {/* The cover yields height (max-h) on short windows so the name and
+          ratings below it stay visible — text outranks the portrait here. */}
+      <div className="relative aspect-[16/9] max-h-[24vh] overflow-hidden">
         <CoverImage
           url={entry.coverUrl}
           alt={entry.name}
@@ -110,10 +112,7 @@ export default function SwipeCard({
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <span className="flex items-center gap-2">
-            <span className="text-[11px] uppercase tracking-wide text-slate-500">Gut</span>
-            <Stars value={entry.starRating} />
-          </span>
+          <Stars value={entry.starRating} />
           {entry.computedOverall != null ? (
             <span className="flex items-center gap-2">
               <span className="text-[11px] uppercase tracking-wide text-slate-500">Detailed</span>

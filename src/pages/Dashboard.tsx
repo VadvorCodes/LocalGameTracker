@@ -121,7 +121,10 @@ export default function Dashboard() {
         <Panel title="Star rating distribution">
           {analytics.starDistribution.some((d) => d.y > 0) ? (
             <ChartFrame kind="bar" data={analytics.starDistribution} xKey="x" yWholeNumbers>
-              <Bar dataKey="y" radius={[4, 4, 0, 0]}>
+              {/* Bar-level name/fill drive the tooltip (Cell fills only
+                  colour the bars themselves; without them the tooltip shows
+                  the raw dataKey in default black). */}
+              <Bar dataKey="y" name="Games" fill="#34d399" radius={[4, 4, 0, 0]}>
                 {analytics.starDistribution.map((d) => (
                   <Cell
                     key={d.x}
@@ -189,7 +192,7 @@ export default function Dashboard() {
                   xInterval={1}
                   yWholeNumbers
                 >
-                  <Bar dataKey="y" fill={palette.accent} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="y" name="Games" fill={palette.accent} radius={[4, 4, 0, 0]} />
                 </ChartFrame>
               ) : (
                 <Empty text="No detailed scores yet." />
