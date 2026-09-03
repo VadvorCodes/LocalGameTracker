@@ -68,7 +68,7 @@ export default function SwipeCard({
 
   return (
     <div
-      className="card w-[380px] max-w-full overflow-hidden select-none cursor-grab active:cursor-grabbing shadow-2xl shadow-black/50"
+      className="card w-[clamp(280px,30vw,380px)] max-w-full overflow-hidden select-none cursor-grab active:cursor-grabbing shadow-2xl shadow-black/50"
       data-testid="swipe-card"
       style={{
         transform,
@@ -103,9 +103,10 @@ export default function SwipeCard({
         <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-surface-900 to-transparent" />
       </div>
       <div className="p-4 space-y-3">
-        {/* Narrow card (small window): the status chip hugs the title instead
-            of pinning to the far edge, so the row doesn't span dead space. */}
-        <div className="flex items-start justify-start gap-3 sm:justify-between">
+        {/* The clamp tracks the window (app minimum is 960px wide, tauri.conf.json):
+            ~288px card at the smallest size, full 380px from the 1280 default up.
+            Narrower card = the title/chip row compacts on its own. */}
+        <div className="flex items-start justify-between gap-3">
           <h2 className="text-lg font-semibold text-white leading-tight">{entry.name}</h2>
           <span
             className={`chip shrink-0 ${STATUS_COLORS[entry.status].bg} ${STATUS_COLORS[entry.status].text} ${STATUS_COLORS[entry.status].border}`}
