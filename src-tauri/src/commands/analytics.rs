@@ -336,9 +336,11 @@ fn top_entries(
     order: &str,
     limit: u32,
 ) -> AppResult<Vec<MiniEntry>> {
+    // RANDOM() as the final tiebreaker shuffles equal-ranked rows (very common
+    // at 5.0 stars), so the LIMIT sample differs from fetch to fetch.
     let mut stmt = conn.prepare(&format!(
         "SELECT e.id, c.name, c.cover_url, r.star_rating, r.computed_overall
-         {JOIN} WHERE e.profile_id = ?1 AND {cond} ORDER BY {order} LIMIT {limit}"
+         {JOIN} WHERE e.profile_id = ?1 AND {cond} ORDER BY {order}, RANDOM() LIMIT {limit}"
     ))?;
     let it = stmt.query_map(params![pid], |r| Ok(MiniEntry {
         entry_id: r.get(0)?, name: r.get(1)?, cover_url: r.get(2)?, stars: r.get(3)?, overall: r.get(4)?,

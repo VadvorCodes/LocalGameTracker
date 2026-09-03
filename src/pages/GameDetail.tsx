@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import type { CategoryWeights, LibraryEntry, PlayStatus } from "../types";
@@ -6,10 +6,22 @@ import { STATUS_COLORS, STATUS_LABELS } from "../types";
 import CoverImage from "../components/CoverImage";
 import { StarPicker, Stars } from "../components/StarRating";
 import { HeartIcon, TrashIcon } from "../components/icons";
-import { formatDate, formatPlaytime, scoreColor } from "../lib/format";
+import { divergenceText, formatDate, formatPlaytime, scoreColor } from "../lib/format";
+import { computeWeightedOverall } from "../lib/scoring";
 import { useApp } from "../store";
 
 const STATUSES: PlayStatus[] = ["WantToPlay", "Playing", "Completed", "Dropped"];
+
+// Preset thresholds stored as exact values ("100+" saves 100 h) so sorting and
+// any future filtering keep working on plain minutes. Anything else is Custom.
+const HOUR_PRESETS = [5, 10, 25, 50, 100, 250, 500, 1000];
+const HOURS_CUSTOM = "custom";
+
+function hoursPresetFor(hoursStr: string): string {
+  const h = Math.max(0, Math.floor(Number(hoursStr) || 0));
+  if (h === 0) return "0";
+  return (HOUR_PRESETS as readonly number[]).includes(h) ? String(h) : HOURS_CUSTOM;
+}
 
 const CATEGORIES = [
   { key: "gameplay", label: "Gameplay" },
@@ -32,6 +44,7 @@ export default function GameDetail() {
   const [notesDirty, setNotesDirty] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [hours, setHours] = useState("0");
+  const [hoursPreset, setHoursPreset] = useState("0");
   const [catDraft, setCatDraft] = useState<Record<CatKey, number | null>>({
     gameplay: null, story: null, music: null, technical: null,
   });
@@ -40,19 +53,26 @@ export default function GameDetail() {
   const [startedDraft, setStartedDraft] = useState("");
   const [finishedDraft, setFinishedDraft] = useState("");
   const [dateError, setDateError] = useState<string | null>(null);
+  const loadSeq = useRef(0);
 
   useEffect(() => {
     if (!Number.isFinite(entryId)) return;
+    const seq = ++loadSeq.current;
     api.getLibraryEntry(entryId).then((e) => {
+      if (seq !== loadSeq.current) return; // navigated to another entry meanwhile
       setEntry(e);
       setNotes(e.notes);
-      setHours(String(Math.floor(e.playtimeMinutes / 60)));
+      const loadedHours = String(Math.floor(e.playtimeMinutes / 60));
+      setHours(loadedHours);
+      setHoursPreset(hoursPresetFor(loadedHours));
       setStartedDraft(e.startedAt?.slice(0, 10) ?? "");
       setFinishedDraft(e.finishedAt?.slice(0, 10) ?? "");
       setCatDraft({
         gameplay: e.gameplay, story: e.story, music: e.music, technical: e.technical,
       });
-    }).catch((err) => setError(String(err)));
+    }).catch((err) => {
+      if (seq === loadSeq.current) setError(String(err));
+    });
   }, [entryId]);
 
   if (error) {
@@ -87,11 +107,16 @@ export default function GameDetail() {
     catDraft.music !== entry.music ||
     catDraft.technical !== entry.technical;
 
-  async function patch(p: Parameters<typeof api.updateLibraryEntry>[1]) {
+  // Any unsaved change (score or notes) blocks the way out until "Save score".
+  const dirty = catDirty || notesDirty;
+
+  async function patch(p: Parameters<typeof api.updateLibraryEntry>[1]): Promise<boolean> {
     try {
       setEntry(await api.updateLibraryEntry(entryId, p));
+      return true;
     } catch (e) {
       setError(String(e));
+      return false;
     }
   }
 
@@ -103,10 +128,10 @@ export default function GameDetail() {
     }
   }
 
-  async function saveCategories() {
+  async function saveAndLeave() {
     try {
-      setEntry(await api.setCategoryScores(entryId, catDraft));
-      // Rating saved and done — back to the library.
+      if (catDirty) setEntry(await api.setCategoryScores(entryId, catDraft));
+      if (notesDirty) setEntry(await api.updateLibraryEntry(entryId, { notes }));
       navigate("/library");
     } catch (e) {
       setError(String(e));
@@ -114,8 +139,9 @@ export default function GameDetail() {
   }
 
   async function saveNotes() {
-    await patch({ notes });
-    setNotesDirty(false);
+    // Only clear the dirty flag when the notes actually persisted, otherwise
+    // the UI would claim saved state that isn't.
+    if (await patch({ notes })) setNotesDirty(false);
   }
 
   // ISO dates compare correctly as strings. Validate the merged pair on
@@ -137,19 +163,37 @@ export default function GameDetail() {
 
   async function savePlaytime() {
     const h = Math.max(0, Math.floor(Number(hours) || 0));
+    // An exact preset value typed into the custom field snaps back to the preset.
+    setHoursPreset(hoursPresetFor(String(h)));
     await patch({ playtimeMinutes: h * 60 });
   }
 
-  async function remove() {
-    await api.removeLibraryEntry(entryId);
-    navigate("/library");
+  function selectHoursPreset(v: string) {
+    setHoursPreset(v);
+    if (v === HOURS_CUSTOM) return; // number input takes over; saved on blur
+    setHours(v);
+    patch({ playtimeMinutes: Number(v) * 60 });
   }
 
-  const previewOverall = computePreview(catDraft, weights);
+  async function remove() {
+    try {
+      await api.removeLibraryEntry(entryId);
+      navigate("/library");
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  const previewOverall = computeWeightedOverall(catDraft, weights);
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
-      <button className="text-sm text-slate-500 hover:text-slate-300 mb-4" onClick={() => navigate(-1)}>
+      <button
+        className="text-sm text-slate-500 hover:text-slate-300 mb-4 disabled:opacity-40 disabled:hover:text-slate-500"
+        disabled={dirty}
+        title={dirty ? "Save your changes first" : undefined}
+        onClick={() => navigate(-1)}
+      >
         ← Back
       </button>
 
@@ -220,13 +264,29 @@ export default function GameDetail() {
             <section className="grid grid-cols-3 gap-4">
               <label className="text-xs text-slate-400">
                 <div className="mb-1 font-semibold uppercase tracking-wide">Hours played</div>
-                <input
+                <select
                   className="input w-full"
-                  type="number" min={0} step={1}
-                  value={hours}
-                  onChange={(e) => setHours(e.target.value)}
-                  onBlur={savePlaytime}
-                />
+                  value={hoursPreset}
+                  onChange={(e) => selectHoursPreset(e.target.value)}
+                >
+                  <option value="0">Not tracked</option>
+                  {HOUR_PRESETS.map((h) => (
+                    <option key={h} value={String(h)}>
+                      {h}+ hours
+                    </option>
+                  ))}
+                  <option value={HOURS_CUSTOM}>Custom…</option>
+                </select>
+                {hoursPreset === HOURS_CUSTOM && (
+                  <input
+                    className="input w-full mt-2"
+                    type="number" min={0} step={1}
+                    value={hours}
+                    onChange={(e) => setHours(e.target.value)}
+                    onBlur={savePlaytime}
+                    autoFocus
+                  />
+                )}
               </label>
               <label className="text-xs text-slate-400">
                 <div className="mb-1 font-semibold uppercase tracking-wide">Started</div>
@@ -288,16 +348,10 @@ export default function GameDetail() {
           {/* right: ratings */}
           <div className="space-y-8">
             <section className="bg-surface-800/50 rounded-xl p-4">
-              <div className="flex items-baseline justify-between mb-3">
-                <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                  Quick rating
-                </h2>
-                <span className="text-[11px] text-slate-500">gut feeling, 0–5 stars</span>
-              </div>
+              <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">
+                Quick rating
+              </h2>
               <StarPicker value={entry.starRating} onChange={setStars} />
-              <p className="text-[11px] text-slate-500 mt-2">
-                The fast take you’d give a friend. Independent of the detailed score.
-              </p>
             </section>
 
             <section className="bg-surface-800/50 rounded-xl p-4">
@@ -325,7 +379,9 @@ export default function GameDetail() {
                       onChange={(e) => {
                         setCatDraft({ ...catDraft, [key]: Number(e.target.value) });
                       }}
-                      className="w-full accent-accent-500 select-none"
+                      className={`w-full select-none ${
+                        catDraft[key] != null ? "accent-accent-500" : "accent-surface-600"
+                      }`}
                     />
                   </div>
                 ))}
@@ -354,8 +410,8 @@ export default function GameDetail() {
                     <span className="text-sm text-slate-500 font-normal"> / 100</span>
                   </div>
                 </div>
-                <button className="btn-primary" disabled={!catDirty} onClick={saveCategories}>
-                  {catDirty ? "Save score" : "Saved"}
+                <button className="btn-primary" disabled={!dirty} onClick={saveAndLeave}>
+                  {dirty ? "Save score" : "Saved"}
                 </button>
               </div>
             </section>
@@ -379,30 +435,4 @@ export default function GameDetail() {
       </div>
     </div>
   );
-}
-
-function computePreview(
-  draft: Record<CatKey, number | null>,
-  w: CategoryWeights,
-): number | null {
-  const pairs: [number | null, number][] = [
-    [draft.gameplay, w.gameplay],
-    [draft.story, w.story],
-    [draft.music, w.music],
-    [draft.technical, w.technical],
-  ];
-  const filled = pairs.filter(([v]) => v != null) as [number, number][];
-  if (filled.length === 0) return null;
-  const totalW = filled.reduce((s, [, wt]) => s + wt, 0);
-  if (totalW <= 0) return filled.reduce((s, [v]) => s + v, 0) / filled.length;
-  return Math.round((filled.reduce((s, [v, wt]) => s + v * wt, 0) / totalW) * 10) / 10;
-}
-
-function divergenceText(stars: number, overall: number): string {
-  const diff = stars * 20 - overall;
-  if (diff >= 15)
-    return "Your gut rating is well above your detailed score — a game you love more than its parts.";
-  if (diff <= -15)
-    return "Your detailed score is well above your gut rating — impressive pieces that didn’t quite win you over.";
-  return "Your gut feeling and detailed score agree — a settled opinion.";
 }

@@ -8,6 +8,11 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    // Don't watch the Rust build tree — fs.watch hits EBUSY on Windows while
+    // cargo is linking the exe, which crashes the dev server.
+    watch: {
+      ignored: ["**/src-tauri/**"],
+    },
   },
   envPrefix: ["VITE_", "TAURI_"],
   build: {

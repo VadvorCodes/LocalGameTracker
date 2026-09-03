@@ -43,6 +43,7 @@ fn main() {
             commands::profile::get_profile,
             commands::profile::create_profile,
             commands::profile::update_weights,
+            commands::profile::rename_profile,
             commands::games::search_games,
             commands::games::library_query,
             commands::games::add_to_library,
@@ -52,9 +53,15 @@ fn main() {
             commands::games::get_genres_and_platforms,
             commands::ratings::set_star_rating,
             commands::ratings::set_category_scores,
+            commands::rerate::start_rerate_session,
+            commands::rerate::mark_rerated,
             commands::analytics::get_analytics,
             commands::settings_cmd::get_api_key,
             commands::settings_cmd::set_api_key,
+            commands::settings_cmd::get_settings,
+            commands::settings_cmd::set_theme,
+            commands::settings_cmd::set_custom_theme,
+            commands::settings_cmd::set_extended_sorting,
             commands::images::cache_image,
         ])
         .run(tauri::generate_context!())

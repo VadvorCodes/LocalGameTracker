@@ -5,16 +5,16 @@ export default {
     extend: {
       colors: {
         surface: {
-          950: "#0b0e14",
-          900: "#11151f",
-          800: "#181d2a",
-          700: "#232a3d",
-          600: "#2f3850",
+          950: "rgb(var(--surface-950) / <alpha-value>)",
+          900: "rgb(var(--surface-900) / <alpha-value>)",
+          800: "rgb(var(--surface-800) / <alpha-value>)",
+          700: "rgb(var(--surface-700) / <alpha-value>)",
+          600: "rgb(var(--surface-600) / <alpha-value>)",
         },
         accent: {
-          400: "#7c9cff",
-          500: "#5b7cfa",
-          600: "#4460e0",
+          400: "rgb(var(--accent-400) / <alpha-value>)",
+          500: "rgb(var(--accent-500) / <alpha-value>)",
+          600: "rgb(var(--accent-600) / <alpha-value>)",
         },
       },
       fontFamily: {

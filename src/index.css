@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Default palette (Midnight preset) — overridden at runtime by src/lib/themes.ts.
+   Values are "r g b" triplets; tailwind.config.js wraps them with rgb(var() / alpha). */
+:root {
+  --surface-950: 11 14 20;
+  --surface-900: 17 21 31;
+  --surface-800: 24 29 42;
+  --surface-700: 35 42 61;
+  --surface-600: 47 56 80;
+  --accent-400: 124 156 255;
+  --accent-500: 91 124 250;
+  --accent-600: 68 96 224;
+}
+
 html, body, #root {
   height: 100%;
 }

@@ -15,19 +15,23 @@ pub struct SearchOutcome {
 
 /// Search RAWG; on any network/API failure fall back to the local cache so the
 /// app remains usable offline. Results are always upserted into the cache.
+/// Year range and the DLC/editions exclusion are applied inside the RAWG query
+/// (full recall); finer ranking and genre/platform filtering happen client-side.
 #[tauri::command]
 pub async fn search_games(
     state: tauri::State<'_, AppState>,
     query: String,
     page: Option<u32>,
+    filters: Option<crate::models::SearchFilters>,
 ) -> AppResult<SearchOutcome> {
     let query = query.trim().to_string();
     if query.is_empty() {
         return Ok(SearchOutcome { games: vec![], source: "live".into() });
     }
     let page = page.unwrap_or(1);
+    let filters = filters.unwrap_or_default();
 
-    match state.rawg.search(&query, page).await {
+    match state.rawg.search(&query, page, &filters).await {
         Ok(resp) => {
             let games: Vec<CachedGame> = resp.results.iter().map(CachedGame::from).collect();
             let conn = state.db.lock().unwrap();
@@ -36,7 +40,8 @@ pub async fn search_games(
         }
         Err(_) => {
             let conn = state.db.lock().unwrap();
-            let games = cache::search_cached(&conn, &query, 24)?;
+            let games =
+                cache::search_cached(&conn, &query, filters.from_year, filters.to_year, 40)?;
             Ok(SearchOutcome { games, source: "cache".into() })
         }
     }
@@ -175,7 +180,6 @@ pub fn get_library_entry(state: tauri::State<AppState>, entry_id: i64) -> AppRes
 const SORTS: &[(&str, &str)] = &[
     ("name", "c.name COLLATE NOCASE"),
     ("added", "e.created_at"),
-    ("updated", "e.updated_at"),
     ("releaseDate", "c.release_date"),
     ("playtime", "e.playtime_minutes"),
     ("stars", "r.star_rating"),
@@ -187,6 +191,17 @@ const SORTS: &[(&str, &str)] = &[
     ("ratedAt", "r.rated_at"),
 ];
 
+/// Shared SELECT for LibraryEntry rows; column order must match `map_entry`
+/// (index 23 is the re-rate cooldown tag).
+pub(crate) const ENTRY_SELECT: &str = "SELECT e.id, c.rawg_id, c.name, c.cover_url, c.genres, c.platforms, c.release_date, c.developer,
+        e.status, e.favourite, e.playtime_minutes, e.started_at, e.finished_at, e.notes, e.created_at, e.updated_at,
+        r.star_rating, r.gameplay, r.story, r.music, r.technical, r.computed_overall, r.rated_at,
+        rt.rerated_at";
+pub(crate) const ENTRY_FROM: &str = "FROM library_entry e
+         JOIN game_cache c ON c.rawg_id = e.rawg_id
+         LEFT JOIN rating r ON r.library_entry_id = e.id
+         LEFT JOIN rerate_tag rt ON rt.library_entry_id = e.id";
+
 #[tauri::command]
 pub fn library_query(
     state: tauri::State<AppState>,
@@ -195,12 +210,8 @@ pub fn library_query(
     let conn = state.db.lock().unwrap();
     let profile = super::profile::read_profile(&conn)?.ok_or_else(|| AppError::msg("no profile"))?;
 
-    let mut sql = String::from(
-        "FROM library_entry e
-         JOIN game_cache c ON c.rawg_id = e.rawg_id
-         LEFT JOIN rating r ON r.library_entry_id = e.id
-         WHERE e.profile_id = ?1",
-    );
+    let mut sql = String::from(ENTRY_FROM);
+    sql.push_str(" WHERE e.profile_id = ?1");
     let mut args: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(profile.id)];
 
     if let Some(s) = query.search.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
@@ -258,12 +269,7 @@ pub fn library_query(
         " ORDER BY {sort_col} {dir} NULLS LAST, c.name COLLATE NOCASE ASC LIMIT 2000"
     ));
 
-    let full = format!(
-        "SELECT e.id, c.rawg_id, c.name, c.cover_url, c.genres, c.platforms, c.release_date, c.developer,
-                e.status, e.favourite, e.playtime_minutes, e.started_at, e.finished_at, e.notes, e.created_at, e.updated_at,
-                r.star_rating, r.gameplay, r.story, r.music, r.technical, r.computed_overall, r.rated_at
-         {sql}"
-    );
+    let full = format!("{ENTRY_SELECT} {sql}");
     let mut stmt = conn.prepare(&full)?;
     let refs: Vec<&dyn rusqlite::types::ToSql> = args.iter().map(|b| b.as_ref()).collect();
     let rows = stmt.query_map(refs.as_slice(), map_entry)?;
@@ -306,20 +312,27 @@ pub fn get_genres_and_platforms(state: tauri::State<AppState>) -> AppResult<Genr
 
 pub(crate) fn get_entry(conn: &rusqlite::Connection, entry_id: i64) -> Option<LibraryEntry> {
     conn.query_row(
-        "SELECT e.id, c.rawg_id, c.name, c.cover_url, c.genres, c.platforms, c.release_date, c.developer,
-                e.status, e.favourite, e.playtime_minutes, e.started_at, e.finished_at, e.notes, e.created_at, e.updated_at,
-                r.star_rating, r.gameplay, r.story, r.music, r.technical, r.computed_overall, r.rated_at
-         FROM library_entry e
-         JOIN game_cache c ON c.rawg_id = e.rawg_id
-         LEFT JOIN rating r ON r.library_entry_id = e.id
-         WHERE e.id = ?1",
+        &format!("{ENTRY_SELECT} {ENTRY_FROM} WHERE e.id = ?1"),
         params![entry_id],
         map_entry,
     )
     .ok()
 }
 
-fn map_entry(r: &rusqlite::Row) -> rusqlite::Result<LibraryEntry> {
+/// The profile's full library in random order (callers that need stable order
+/// sort in Rust; the random base order doubles as a tiebreaker for scoring).
+pub(crate) fn list_library(
+    conn: &rusqlite::Connection,
+    profile_id: i64,
+) -> AppResult<Vec<LibraryEntry>> {
+    let mut stmt = conn.prepare(&format!(
+        "{ENTRY_SELECT} {ENTRY_FROM} WHERE e.profile_id = ?1 ORDER BY RANDOM()"
+    ))?;
+    let rows = stmt.query_map(params![profile_id], map_entry)?;
+    Ok(rows.filter_map(|x| x.ok()).collect())
+}
+
+pub(crate) fn map_entry(r: &rusqlite::Row) -> rusqlite::Result<LibraryEntry> {
     Ok(LibraryEntry {
         id: r.get(0)?,
         rawg_id: r.get(1)?,
@@ -344,5 +357,6 @@ fn map_entry(r: &rusqlite::Row) -> rusqlite::Result<LibraryEntry> {
         technical: r.get(20)?,
         computed_overall: r.get(21)?,
         rated_at: r.get(22)?,
+        rerated_at: r.get(23)?,
     })
 }

@@ -1,17 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import type { LibraryEntry, LibraryQuery, PlayStatus, SortKey } from "../types";
 import { SORT_LABELS, STATUS_COLORS, STATUS_LABELS } from "../types";
 import { GameCard, SkeletonCard } from "../components/GameCard";
+import FilterGroup from "../components/FilterGroup";
 import { formatPlaytime } from "../lib/format";
 import { useApp } from "../store";
 
 const STATUSES: PlayStatus[] = ["WantToPlay", "Playing", "Completed", "Dropped"];
-const SORTS: SortKey[] = [
-  "added", "name", "updated", "releaseDate", "playtime", "ratedAt",
-  "stars", "score", "gameplay", "story", "music", "technical",
-];
+// Rating, detailed rating, date added and name sit at the top of the sort
+// menu; the "Other" and "By category" groups appear only when "Extended
+// sorting options" is enabled in Settings.
+const PRIMARY_SORTS: SortKey[] = ["stars", "score", "added", "name"];
+const OTHER_SORTS: SortKey[] = ["releaseDate", "playtime", "ratedAt"];
+const CATEGORY_SORTS: SortKey[] = ["gameplay", "story", "music", "technical"];
+// Every sort that only exists while extended sorting is enabled.
+const EXTENDED_SORTS: SortKey[] = [...OTHER_SORTS, ...CATEGORY_SORTS];
 
 export default function Library() {
   const [entries, setEntries] = useState<LibraryEntry[]>([]);
@@ -26,13 +31,21 @@ export default function Library() {
   const [selPlatforms, setSelPlatforms] = useState<Set<string>>(new Set());
   const [minStars, setMinStars] = useState(0);
   const [minScore, setMinScore] = useState(0);
-  const [sort, setSort] = useState<SortKey>("added");
+  const [sort, setSort] = useState<SortKey>("stars");
   const [sortDesc, setSortDesc] = useState(true);
   const [filterPanel, setFilterPanel] = useState(false);
   const navigate = useNavigate();
   const profile = useApp((s) => s.profile);
+  const extendedSorting = useApp((s) => s.settings.extendedSorting);
+  const loadSeq = useRef(0);
+  // Render and query through effectiveSort: if extended sorting is switched
+  // off while an extended sort is active, fall back to Rating (keeping the
+  // chosen direction) without ever rendering a mismatched select.
+  const effectiveSort =
+    extendedSorting || !EXTENDED_SORTS.includes(sort) ? sort : "stars";
 
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     const q: LibraryQuery = {
       search: search.trim() || undefined,
@@ -42,29 +55,45 @@ export default function Library() {
       platforms: [...selPlatforms],
       minStars: minStars > 0 ? minStars : undefined,
       minScore: minScore > 0 ? minScore : undefined,
-      sort,
+      sort: effectiveSort,
       sortDesc,
     };
     try {
-      setEntries(await api.libraryQuery(q));
+      const result = await api.libraryQuery(q);
+      if (seq !== loadSeq.current) return; // a newer query superseded this one
+      setEntries(result);
       setError(null);
     } catch (e) {
+      if (seq !== loadSeq.current) return;
       setError(String(e));
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
-  }, [search, statuses, favouritesOnly, selGenres, selPlatforms, minStars, minScore, sort, sortDesc]);
+  }, [search, statuses, favouritesOnly, selGenres, selPlatforms, minStars, minScore, effectiveSort, sortDesc]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
     return () => clearTimeout(t);
   }, [load, profile]);
 
+  // Keep the raw sort state honest once extended sorting is off.
   useEffect(() => {
-    api.getGenresAndPlatforms().then((info) => {
-      setGenres(info.genres);
-      setPlatforms(info.platforms);
-    });
+    if (!extendedSorting && EXTENDED_SORTS.includes(sort)) setSort("stars");
+  }, [extendedSorting, sort]);
+
+  useEffect(() => {
+    let alive = true;
+    api.getGenresAndPlatforms()
+      .then((info) => {
+        if (alive) {
+          setGenres(info.genres);
+          setPlatforms(info.platforms);
+        }
+      })
+      .catch(() => {}); // the filter panel just falls back to no options
+    return () => {
+      alive = false;
+    };
   }, [profile, entries.length]);
 
   const activeFilters =
@@ -106,16 +135,35 @@ export default function Library() {
           >
             Filters{activeFilters ? ` (${activeFilters})` : ""}
           </button>
+          <span className="text-sm text-slate-400">Sort</span>
           <select
             className="input"
-            value={sort}
+            value={effectiveSort}
             onChange={(e) => setSort(e.target.value as SortKey)}
           >
-            {SORTS.map((s) => (
+            {PRIMARY_SORTS.map((s) => (
               <option key={s} value={s}>
-                Sort: {SORT_LABELS[s]}
+                {SORT_LABELS[s]}
               </option>
             ))}
+            {extendedSorting && (
+              <>
+                <optgroup label="Other">
+                  {OTHER_SORTS.map((s) => (
+                    <option key={s} value={s}>
+                      {SORT_LABELS[s]}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="By category">
+                  {CATEGORY_SORTS.map((s) => (
+                    <option key={s} value={s}>
+                      {SORT_LABELS[s]}
+                    </option>
+                  ))}
+                </optgroup>
+              </>
+            )}
           </select>
           <button
             className="btn-ghost !px-3"
@@ -173,7 +221,7 @@ export default function Library() {
           <div className="flex flex-wrap gap-8">
             <label className="text-xs text-slate-400">
               <div className="mb-1">
-                Min star rating: <span className="text-slate-200">{minStars}</span>
+                Min rating: <span className="text-slate-200">{minStars}</span>
               </div>
               <input
                 type="range" min={0} max={5} step={0.5}
@@ -184,7 +232,7 @@ export default function Library() {
             </label>
             <label className="text-xs text-slate-400">
               <div className="mb-1">
-                Min detailed score: <span className="text-slate-200">{minScore}</span>
+                Min detailed rating: <span className="text-slate-200">{minScore}</span>
               </div>
               <input
                 type="range" min={0} max={100} step={5}
@@ -237,35 +285,6 @@ export default function Library() {
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function FilterGroup({
-  title,
-  options,
-  selected,
-  onToggle,
-}: {
-  title: string;
-  options: string[];
-  selected: Set<string>;
-  onToggle: (v: string) => void;
-}) {
-  return (
-    <div>
-      <div className="text-xs font-semibold text-slate-400 mb-2">{title}</div>
-      <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
-        {options.map((o) => (
-          <button
-            key={o}
-            className={`chip ${selected.has(o) ? "bg-accent-600/20 text-accent-400 border-accent-500/40" : "bg-surface-800 text-slate-400 border-surface-600"}`}
-            onClick={() => onToggle(o)}
-          >
-            {o}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }

@@ -56,6 +56,29 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX idx_library_profile ON library_entry(profile_id);
     CREATE INDEX idx_game_cache_name ON game_cache(name);
     ",
+    // v2: re-rate mode — hidden "Recently Rerated" tag (excludes the game from
+    // the next re-rate cycle only; cleared when the cycle after that starts).
+    "
+    ALTER TABLE rating ADD COLUMN rerated_at TEXT;
+    CREATE INDEX idx_rating_rerated ON rating(rerated_at);
+    ",
+    // v3: move the "Recently Rerated" tag out of `rating` into its own table.
+    // The tag is scheduling state, not a rating — storing it in `rating` forced
+    // tag-only rows whose star_rating/rated_at were NULL, so "a row exists"
+    // stopped meaning "this entry has been rated". A dedicated table keeps
+    // `rating` clean and makes the eligibility filter a plain sargable IS NULL.
+    "
+    CREATE TABLE rerate_tag (
+        library_entry_id INTEGER PRIMARY KEY REFERENCES library_entry(id) ON DELETE CASCADE,
+        rerated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    INSERT INTO rerate_tag (library_entry_id, rerated_at)
+    SELECT library_entry_id, rerated_at FROM rating WHERE rerated_at IS NOT NULL;
+
+    DROP INDEX idx_rating_rerated;
+    ALTER TABLE rating DROP COLUMN rerated_at;
+    ",
 ];
 
 pub fn open(path: &Path) -> AppResult<Connection> {
@@ -66,7 +89,7 @@ pub fn open(path: &Path) -> AppResult<Connection> {
     Ok(conn)
 }
 
-fn migrate(conn: &Connection) -> AppResult<()> {
+pub(crate) fn migrate(conn: &Connection) -> AppResult<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)",
         [],
@@ -85,4 +108,55 @@ fn migrate(conn: &Connection) -> AppResult<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn v3_moves_existing_tags_out_of_rating() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        // Stop at v2 and plant a cooldown tag the old way (a tag-only rating row).
+        conn.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)", [])
+            .unwrap();
+        conn.execute_batch(MIGRATIONS[0]).unwrap();
+        conn.execute("INSERT INTO schema_version (version) VALUES (1)", []).unwrap();
+        conn.execute_batch(MIGRATIONS[1]).unwrap();
+        conn.execute("INSERT INTO schema_version (version) VALUES (2)", []).unwrap();
+        conn.execute("INSERT INTO profile (username) VALUES ('tester')", []).unwrap();
+        conn.execute(
+            "INSERT INTO game_cache (rawg_id, name, raw_json) VALUES (1, 'Game 1', '{}')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO library_entry (id, profile_id, rawg_id, status) VALUES (1, 1, 1, 'Completed')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO rating (library_entry_id, rerated_at) VALUES (1, datetime('now'))",
+            [],
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap(); // applies v3 on top
+
+        let tag: String = conn
+            .query_row("SELECT rerated_at FROM rerate_tag WHERE library_entry_id = 1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(!tag.is_empty());
+        let dropped: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('rating') WHERE name = 'rerated_at'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(dropped, 0);
+    }
 }

@@ -25,14 +25,16 @@ export function GameCard({ entry, onOpen }: { entry: LibraryEntry; onOpen: (id: 
         )}
       </div>
       <div className="p-3">
-        <h3 className="font-medium text-sm text-slate-100 truncate" title={entry.name}>
+        <h3 className="font-medium text-sm text-slate-100 line-clamp-2" title={entry.name}>
           {entry.name}
         </h3>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
-          <span className={`chip ${STATUS_COLORS[entry.status]} shrink-0`}>
-            {STATUS_LABELS[entry.status]}
-          </span>
-          <span className="flex items-center gap-2 shrink-0 min-w-0">
+        <div className="mt-2 space-y-1.5">
+          <div>
+            <span className={`chip ${STATUS_COLORS[entry.status]}`}>
+              {STATUS_LABELS[entry.status]}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
             <Stars value={entry.starRating} />
             {entry.computedOverall != null && (
               <span
@@ -47,7 +49,7 @@ export function GameCard({ entry, onOpen }: { entry: LibraryEntry; onOpen: (id: 
                 {entry.computedOverall.toFixed(1)}
               </span>
             )}
-          </span>
+          </div>
         </div>
         {(entry.playtimeMinutes > 0 || entry.genres.length > 0) && (
           <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500 truncate">

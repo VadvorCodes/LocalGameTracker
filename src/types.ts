@@ -28,6 +28,20 @@ export interface Profile {
   createdAt: string;
 }
 
+/** User-picked colours for the custom theme (#rrggbb); shades are derived. */
+export interface CustomThemeColours {
+  base: string;
+  accent: string;
+}
+
+/** UI preferences persisted in settings.json. */
+export interface UiSettings {
+  theme: string;
+  customTheme: CustomThemeColours | null;
+  /** Whether the Library sort menu also lists the extended sorts (the "Other" and "By category" groups). */
+  extendedSorting: boolean;
+}
+
 export interface CachedGame {
   rawgId: number;
   name: string;
@@ -36,6 +50,17 @@ export interface CachedGame {
   platforms: string[];
   releaseDate: string | null;
   developer: string | null;
+  /** RAWG "added" count (users who added the game) — the popularity signal for search ranking. */
+  added?: number | null;
+  metacritic?: number | null;
+}
+
+/** Server-side filters applied inside the RAWG query (full recall). */
+export interface SearchFilters {
+  fromYear?: number;
+  toYear?: number;
+  /** Exclude DLC, special editions and remasters (RAWG `exclude_additions`). */
+  excludeAdditions?: boolean;
 }
 
 export interface LibraryEntry {
@@ -62,6 +87,8 @@ export interface LibraryEntry {
   technical: number | null;
   computedOverall: number | null;
   ratedAt: string | null;
+  /** Re-rate cooldown tag ("Recently Rerated"); non-null while the game sits out a cycle. */
+  reratedAt: string | null;
 }
 
 export interface LibraryQuery {
@@ -79,21 +106,20 @@ export interface LibraryQuery {
 }
 
 export type SortKey =
-  | "name" | "added" | "updated" | "releaseDate" | "playtime"
+  | "name" | "added" | "releaseDate" | "playtime"
   | "stars" | "score" | "gameplay" | "story" | "music" | "technical" | "ratedAt";
 
 export const SORT_LABELS: Record<SortKey, string> = {
   name: "Name",
   added: "Date added",
-  updated: "Last updated",
   releaseDate: "Release date",
   playtime: "Playtime",
-  stars: "Star rating",
-  score: "Detailed score",
-  gameplay: "Gameplay score",
-  story: "Story score",
-  music: "Music score",
-  technical: "Technical score",
+  stars: "Rating",
+  score: "Detailed rating",
+  gameplay: "Gameplay",
+  story: "Story",
+  music: "Music",
+  technical: "Technical",
   ratedAt: "Date rated",
 };
 
@@ -160,3 +186,12 @@ export interface CategoryAvgs {
   music: number | null;
   technical: number | null;
 }
+
+/** One game in a re-rate cycle plus its closest genre matches from the library. */
+export interface ReratePoolItem {
+  entry: LibraryEntry;
+  similar: LibraryEntry[];
+}
+
+/** What the user decided during the swipe phase of a re-rate cycle. */
+export type RerateDecision = "rerate" | "keep";

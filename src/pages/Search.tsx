@@ -1,12 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import type { CachedGame, PlayStatus, SearchOutcome } from "../types";
 import { STATUS_LABELS } from "../types";
 import CoverImage from "../components/CoverImage";
+import FilterGroup from "../components/FilterGroup";
+import MixBar from "../components/MixBar";
+import {
+  PRESET_LABELS,
+  RANK_PRESETS,
+  rankGames,
+  type RankPreset,
+  type RankWeights,
+} from "../lib/searchRank";
 import { useApp } from "../store";
 
 const STATUSES: PlayStatus[] = ["WantToPlay", "Playing", "Completed", "Dropped"];
+const YEAR_OPTIONS: number[] = [];
+for (let y = new Date().getFullYear() + 1; y >= 1970; y--) YEAR_OPTIONS.push(y);
 
 export default function Search() {
   const [query, setQuery] = useState("");
@@ -17,15 +28,39 @@ export default function Search() {
   const [dropdown, setDropdown] = useState<number | null>(null);
   const [ratePrompt, setRatePrompt] = useState<{ rawgId: number; entryId: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Ranking: preset chips, with Custom exposing manual weight sliders. Weight
+  // and chip changes re-rank the fetched pool client-side (no refetch); only
+  // the year range and the DLC toggle go back into the RAWG query.
+  const [preset, setPreset] = useState<RankPreset>("balanced");
+  const [customWeights, setCustomWeights] = useState<RankWeights>(RANK_PRESETS.balanced);
+  // True once the user has actually moved a weight slider. Until then Custom
+  // is just a doorway to the sliders, so its chip stays in the neutral
+  // (unselected) style instead of the bright active one.
+  const [customTouched, setCustomTouched] = useState(false);
+  const [filterPanel, setFilterPanel] = useState(false);
+  const [selGenres, setSelGenres] = useState<Set<string>>(new Set());
+  const [selPlatforms, setSelPlatforms] = useState<Set<string>>(new Set());
+  const [fromYear, setFromYear] = useState("");
+  const [toYear, setToYear] = useState("");
+  const [hideAdditions, setHideAdditions] = useState(true);
   const navigate = useNavigate();
   const hasApiKey = useApp((s) => s.hasApiKey);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchSeq = useRef(0);
 
-  const runSearch = useCallback(async (q: string) => {
+  const runSearch = useCallback(async (q: string, fromY: string, toY: string, hide: boolean) => {
+    const seq = ++searchSeq.current;
     setLoading(true);
     setError(null);
     try {
-      const out = await api.searchGames(q);
+      const out = await api.searchGames(q, {
+        filters: {
+          fromYear: fromY ? Number(fromY) : undefined,
+          toYear: toY ? Number(toY) : undefined,
+          excludeAdditions: hide,
+        },
+      });
+      if (seq !== searchSeq.current) return; // a newer search superseded this one
       setOutcome(out);
       // Reflect what's already owned so cards show "In your library"
       // even after an app restart.
@@ -33,10 +68,11 @@ export default function Search() {
         .then((entries) => setAdded(new Set(entries.map((e) => e.rawgId))))
         .catch(() => {});
     } catch (e) {
+      if (seq !== searchSeq.current) return;
       setError(String(e));
       setOutcome(null);
     } finally {
-      setLoading(false);
+      if (seq === searchSeq.current) setLoading(false);
     }
   }, []);
 
@@ -46,11 +82,14 @@ export default function Search() {
       setOutcome(null);
       return;
     }
-    debounce.current = setTimeout(() => runSearch(query.trim()), 350);
+    debounce.current = setTimeout(
+      () => runSearch(query.trim(), fromYear, toYear, hideAdditions),
+      350,
+    );
     return () => {
       if (debounce.current) clearTimeout(debounce.current);
     };
-  }, [query, runSearch]);
+  }, [query, fromYear, toYear, hideAdditions, runSearch]);
 
   async function add(game: CachedGame, status: PlayStatus) {
     setAdding(game.rawgId);
@@ -67,20 +106,47 @@ export default function Search() {
     }
   }
 
-  const results = outcome?.games ?? [];
+  const pool = outcome?.games ?? [];
+  const weights = preset === "custom" ? customWeights : RANK_PRESETS[preset];
+  const results = useMemo(() => {
+    const byGenre = selGenres.size
+      ? pool.filter((g) => g.genres.some((x) => selGenres.has(x)))
+      : pool;
+    const byPlatform = selPlatforms.size
+      ? byGenre.filter((g) => g.platforms.some((x) => selPlatforms.has(x)))
+      : byGenre;
+    return rankGames(byPlatform, query.trim(), weights);
+    // weights is a fresh object in custom mode per render; key on its values
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pool, query, selGenres, selPlatforms, weights.text, weights.popularity, weights.recency]);
+
+  const genreOptions = useMemo(
+    () => [...new Set(pool.flatMap((g) => g.genres))].sort(),
+    [pool],
+  );
+  const platformOptions = useMemo(
+    () => [...new Set(pool.flatMap((g) => g.platforms))].sort(),
+    [pool],
+  );
+
+  const activeFilters =
+    selGenres.size + selPlatforms.size + (fromYear ? 1 : 0) + (toYear ? 1 : 0);
+
+  function toggle<T>(set: Set<T>, v: T): Set<T> {
+    const next = new Set(set);
+    if (next.has(v)) next.delete(v);
+    else next.add(v);
+    return next;
+  }
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
       <h1 className="text-xl font-semibold text-white mb-1">Find games</h1>
-      <p className="text-sm text-slate-500 mb-6">
-        Searches RAWG when online; falls back to your local cache when offline.
-        {!hasApiKey && (
-          <span className="text-amber-400">
-            {" "}
-            No RAWG API key configured yet — add one in Settings for live results.
-          </span>
-        )}
-      </p>
+      {!hasApiKey && (
+        <p className="text-sm text-amber-400 mb-6">
+          No RAWG API key configured yet — add one in Settings for live results.
+        </p>
+      )}
 
       <div className="relative mb-4">
         <input
@@ -96,6 +162,133 @@ export default function Search() {
           </div>
         )}
       </div>
+
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {(Object.keys(PRESET_LABELS) as RankPreset[]).map((p) => {
+          const active =
+            p === "custom" ? preset === "custom" && customTouched : p === preset;
+          return (
+            <button
+              key={p}
+              className={`chip py-1.5 ${active ? "bg-accent-600/20 text-accent-400 border-accent-500/40" : "bg-surface-800 text-slate-400 border-surface-600 hover:text-slate-300"}`}
+              onClick={() => {
+                setPreset(p);
+                // The panel hosts the manual weight sliders — entering Custom
+                // reveals it, leaving Custom hides it again. Switching between
+                // two non-custom presets leaves the panel alone.
+                if (p === "custom") setFilterPanel(true);
+                else if (preset === "custom") setFilterPanel(false);
+              }}
+            >
+              {PRESET_LABELS[p]}
+            </button>
+          );
+        })}
+        <span className="flex-1" />
+        <button
+          className={`chip py-1.5 ${hideAdditions ? "bg-accent-600/20 text-accent-400 border-accent-500/40" : "bg-surface-800 text-slate-400 border-surface-600"}`}
+          title="Excludes DLC, special editions and remasters from results"
+          onClick={() => setHideAdditions(!hideAdditions)}
+        >
+          Hide DLC &amp; editions
+        </button>
+        <button
+          className={`btn ${filterPanel || activeFilters ? "bg-accent-600 text-white" : "btn-ghost"}`}
+          onClick={() => setFilterPanel(!filterPanel)}
+        >
+          Filters{activeFilters ? ` (${activeFilters})` : ""}
+        </button>
+      </div>
+
+      {filterPanel && (
+        <div className="card p-4 mb-6 space-y-4">
+          {preset === "custom" && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-semibold text-slate-400">Ranking mix</div>
+                {customTouched && (
+                  <button
+                    className="btn-ghost text-xs"
+                    onClick={() => {
+                      setCustomWeights(RANK_PRESETS.balanced);
+                      setCustomTouched(false);
+                    }}
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+              <MixBar
+                weights={customWeights}
+                onChange={(w) => {
+                  setPreset("custom");
+                  setCustomTouched(true);
+                  setCustomWeights(w);
+                }}
+              />
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-end gap-4">
+            <label className="text-xs text-slate-400">
+              <div className="mb-1">Released from</div>
+              <select
+                className="input"
+                value={fromYear}
+                onChange={(e) => setFromYear(e.target.value)}
+              >
+                <option value="">Any</option>
+                {YEAR_OPTIONS.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-slate-400">
+              <div className="mb-1">Released to</div>
+              <select className="input" value={toYear} onChange={(e) => setToYear(e.target.value)}>
+                <option value="">Any</option>
+                {YEAR_OPTIONS.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {activeFilters > 0 && (
+              <button
+                className="btn-ghost text-xs"
+                onClick={() => {
+                  setSelGenres(new Set());
+                  setSelPlatforms(new Set());
+                  setFromYear("");
+                  setToYear("");
+                }}
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+
+          {(genreOptions.length > 0 || platformOptions.length > 0) && (
+            <div className="grid md:grid-cols-2 gap-4">
+              <FilterGroup
+                title="Genres"
+                options={genreOptions}
+                selected={selGenres}
+                onToggle={(g) => setSelGenres(toggle(selGenres, g))}
+              />
+              <FilterGroup
+                title="Platforms"
+                options={platformOptions}
+                selected={selPlatforms}
+                onToggle={(p) => setSelPlatforms(toggle(selPlatforms, p))}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {outcome?.source === "cache" && (
         <div className="mb-4 chip bg-amber-500/10 text-amber-300 border-amber-500/30 py-1.5">
@@ -116,7 +309,9 @@ export default function Search() {
 
       {query.trim() && !loading && results.length === 0 && !error && (
         <div className="text-center text-slate-600 text-sm mt-24">
-          No games found for “{query}”.
+          {pool.length > 0
+            ? "No results match your filters."
+            : `No games found for “${query}”.`}
         </div>
       )}
 
@@ -131,7 +326,12 @@ export default function Search() {
                 {g.name}
               </h3>
               <p className="text-[11px] text-slate-500 mt-0.5 truncate">
-                {[g.releaseDate?.split("-")[0], g.developer, ...g.genres.slice(0, 2)]
+                {[
+                  g.releaseDate?.split("-")[0],
+                  g.developer,
+                  ...g.genres.slice(0, 2),
+                  g.metacritic != null ? `MC ${g.metacritic}` : null,
+                ]
                   .filter(Boolean)
                   .join(" · ")}
               </p>

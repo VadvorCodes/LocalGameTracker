@@ -7,16 +7,24 @@ import type {
   LibraryQuery,
   PlayStatus,
   Profile,
+  ReratePoolItem,
+  SearchFilters,
   SearchOutcome,
+  UiSettings,
 } from "./types";
 
 export const api = {
   getProfile: () => invoke<Profile | null>("get_profile"),
   createProfile: (username: string) => invoke<Profile>("create_profile", { username }),
+  renameProfile: (username: string) => invoke<Profile>("rename_profile", { username }),
   updateWeights: (weights: CategoryWeights) => invoke<void>("update_weights", { weights }),
 
-  searchGames: (query: string, page?: number) =>
-    invoke<SearchOutcome>("search_games", { query, page }),
+  searchGames: (query: string, opts?: { page?: number; filters?: SearchFilters }) =>
+    invoke<SearchOutcome>("search_games", {
+      query,
+      page: opts?.page,
+      filters: opts?.filters ?? null,
+    }),
   libraryQuery: (query: LibraryQuery) => invoke<LibraryEntry[]>("library_query", { query }),
   addToLibrary: (game: CachedGame, status: PlayStatus) =>
     invoke<LibraryEntry>("add_to_library", { game, status }),
@@ -38,6 +46,9 @@ export const api = {
 
   setStarRating: (entryId: number, stars: number | null) =>
     invoke<LibraryEntry>("set_star_rating", { entryId, stars }),
+  startRerateSession: (statuses: PlayStatus[]) =>
+    invoke<ReratePoolItem[]>("start_rerate_session", { statuses }),
+  markRerated: (entryId: number) => invoke<void>("mark_rerated", { entryId }),
   setCategoryScores: (
     entryId: number,
     scores: {
@@ -53,6 +64,13 @@ export const api = {
 
   getApiKey: () => invoke<{ hasKey: boolean }>("get_api_key"),
   setApiKey: (key: string) => invoke<{ hasKey: boolean }>("set_api_key", { key }),
+
+  getSettings: () => invoke<UiSettings>("get_settings"),
+  setTheme: (theme: string) => invoke<UiSettings>("set_theme", { theme }),
+  setCustomTheme: (base: string, accent: string) =>
+    invoke<UiSettings>("set_custom_theme", { base, accent }),
+  setExtendedSorting: (enabled: boolean) =>
+    invoke<UiSettings>("set_extended_sorting", { enabled }),
 
   cacheImage: (url: string) => invoke<string>("cache_image", { url }),
 };

@@ -35,6 +35,17 @@ pub struct CachedGame {
     pub platforms: Vec<String>,
     pub release_date: Option<String>,
     pub developer: Option<String>,
+    pub added: Option<i64>,
+    pub metacritic: Option<i64>,
+}
+
+/// Server-side filters for the RAWG search query. All optional.
+#[derive(Debug, Clone, Copy, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SearchFilters {
+    pub from_year: Option<i32>,
+    pub to_year: Option<i32>,
+    pub exclude_additions: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,6 +105,8 @@ pub struct LibraryEntry {
     pub technical: Option<i64>,
     pub computed_overall: Option<f64>,
     pub rated_at: Option<String>,
+    // re-rate cooldown tag ("Recently Rerated"); scheduling state, not a rating
+    pub rerated_at: Option<String>,
 }
 
 /// Query parameters for the library view. All filters optional.

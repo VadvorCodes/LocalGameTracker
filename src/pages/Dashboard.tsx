@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, PolarAngleAxis,
@@ -11,6 +11,7 @@ import { STATUS_COLORS, STATUS_LABELS } from "../types";
 import type { PlayStatus } from "../types";
 import CoverImage from "../components/CoverImage";
 import { Stars } from "../components/StarRating";
+import { themeVars } from "../lib/themes";
 import { formatPlaytime, scoreColor } from "../lib/format";
 import { useApp } from "../store";
 
@@ -27,6 +28,28 @@ export default function Dashboard() {
   const [ratingMode, setRatingMode] = useState<RatingMode>("both");
   const navigate = useNavigate();
   const profile = useApp((s) => s.profile);
+  const settings = useApp((s) => s.settings);
+
+  // Chart colours derived from the active preset (not getComputedStyle — that
+  // races applyTheme's DOM write and lags one render behind a theme switch).
+  const palette = useMemo(() => {
+    const rgb = (name: string) => `rgb(${themeVars(settings.theme, settings.customTheme)[name]})`;
+    return {
+      accent: rgb("--accent-500"),
+      grid: rgb("--surface-700"),
+      polarGrid: rgb("--surface-600"),
+      tooltipBg: rgb("--surface-800"),
+      tooltipBorder: rgb("--surface-600"),
+    };
+  }, [settings.theme, settings.customTheme]);
+
+  const tooltipStyle = {
+    background: palette.tooltipBg,
+    border: `1px solid ${palette.tooltipBorder}`,
+    borderRadius: 8,
+    fontSize: 12,
+    color: "#e2e8f0",
+  };
 
   useEffect(() => {
     api.getAnalytics(ratingMode).then(setA).catch(console.error);
@@ -50,12 +73,7 @@ export default function Dashboard() {
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-8">
       <div>
-        <h1 className="text-xl font-semibold text-white">
-          {profile?.username}’s gaming dashboard
-        </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          How you play, what you love, and how your taste is evolving.
-        </p>
+        <h1 className="text-xl font-semibold text-white">My gaming dashboard</h1>
       </div>
 
       {/* headline stats */}
@@ -127,7 +145,7 @@ export default function Dashboard() {
       {/* category radar */}
       {hasRatings && (a.categoryAverages.gameplay != null || a.categoryAverages.story != null) && (
         <div className="grid md:grid-cols-2 gap-4">
-          <Panel title="Category profile — what you value">
+          <Panel title="Category Profile">
             <ChartWrap>
               <RadarChart
                 data={[
@@ -138,11 +156,11 @@ export default function Dashboard() {
                 ]}
                 outerRadius="70%"
               >
-                <PolarGrid stroke="#2f3850" />
+                <PolarGrid stroke={palette.polarGrid} />
                 <PolarAngleAxis dataKey="cat" tick={{ fill: "#94a3b8", fontSize: 12 }} />
                 <PolarRadiusAxis domain={[0, 100]} tick={{ fill: "#475569", fontSize: 10 }} />
-                <Radar dataKey="v" stroke="#5b7cfa" fill="#5b7cfa" fillOpacity={0.35} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Radar dataKey="v" name="Average" stroke={palette.accent} fill={palette.accent} fillOpacity={0.35} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(value) => Number(value).toFixed(1)} />
               </RadarChart>
             </ChartWrap>
           </Panel>
@@ -154,7 +172,7 @@ export default function Dashboard() {
                   <XAxis dataKey="x" tick={{ fill: "#64748b", fontSize: 10 }} interval={1} />
                   <YAxis allowDecimals={false} tick={{ fill: "#64748b", fontSize: 11 }} />
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="y" fill="#5b7cfa" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="y" fill={palette.accent} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ChartWrap>
             ) : (
@@ -170,12 +188,12 @@ export default function Dashboard() {
           <Panel title="Rating trend — how your standards move">
             <ChartWrap>
               <LineChart data={a.ratingTrend}>
-                <CartesianGrid stroke="#1e2536" />
+                <CartesianGrid stroke={palette.grid} />
                 <XAxis dataKey="month" tick={{ fill: "#64748b", fontSize: 11 }} />
                 <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 11 }} />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Line type="monotone" dataKey="avgOverall" name="Detailed (0-100)" stroke="#5b7cfa" dot />
+                <Line type="monotone" dataKey="avgOverall" name="Detailed (0-100)" stroke={palette.accent} dot />
                 <Line type="monotone" dataKey="avgStars" name="Stars (×20)" stroke="#fbbf24" dot />
               </LineChart>
             </ChartWrap>
@@ -183,12 +201,12 @@ export default function Dashboard() {
           <Panel title="Category trends — how your taste evolves">
             <ChartWrap>
               <LineChart data={a.categoryTrend}>
-                <CartesianGrid stroke="#1e2536" />
+                <CartesianGrid stroke={palette.grid} />
                 <XAxis dataKey="month" tick={{ fill: "#64748b", fontSize: 11 }} />
                 <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 11 }} />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Line type="monotone" dataKey="gameplay" stroke="#5b7cfa" dot={false} />
+                <Line type="monotone" dataKey="gameplay" stroke={palette.accent} dot={false} />
                 <Line type="monotone" dataKey="story" stroke="#34d399" dot={false} />
                 <Line type="monotone" dataKey="music" stroke="#fbbf24" dot={false} />
                 <Line type="monotone" dataKey="technical" stroke="#fb7185" dot={false} />
@@ -200,11 +218,7 @@ export default function Dashboard() {
 
       {/* first vs recent shift */}
       {a.firstVsRecent && (
-        <Panel title="Then vs now — your shifting preferences">
-          <p className="text-xs text-slate-500 mb-4">
-            Average category scores in the first quarter of your rating history vs the most
-            recent quarter. Only meaningful once you’ve rated a decent number of games.
-          </p>
+        <Panel title="Then vs Now">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {(
               [
@@ -284,7 +298,7 @@ export default function Dashboard() {
               </div>
             }
           >
-            <MiniList entries={a.highestRated} onOpen={(id) => navigate(`/game/${id}`)} />
+            <MiniList entries={a.highestRated} onOpen={(id) => navigate(`/game/${id}`)} mode={ratingMode} />
           </Panel>
           <Panel
             title="Lowest rated"
@@ -298,7 +312,7 @@ export default function Dashboard() {
               </span>
             }
           >
-            <MiniList entries={a.lowestRated} onOpen={(id) => navigate(`/game/${id}`)} />
+            <MiniList entries={a.lowestRated} onOpen={(id) => navigate(`/game/${id}`)} mode={ratingMode} />
           </Panel>
         </div>
       )}
@@ -307,13 +321,13 @@ export default function Dashboard() {
         <div className="grid md:grid-cols-2 gap-4">
           <Panel title="♥ Gut-feeling picks — loved more than their parts">
             <p className="text-xs text-slate-500 mb-3">
-              Star rating at least 15 points (on the 100 scale) above the detailed score.
+              Star rating exceeds the detailed score by 15+ points.
             </p>
             <MiniList entries={a.gutFeelingGames} onOpen={(id) => navigate(`/game/${id}`)} />
           </Panel>
           <Panel title="🧠 On-reflection picks — better than they felt">
             <p className="text-xs text-slate-500 mb-3">
-              Detailed score at least 15 points above the star rating (on the 100 scale).
+              Detailed score exceeds the star rating by 15+ points.
             </p>
             <MiniList entries={a.onReflectionGames} onOpen={(id) => navigate(`/game/${id}`)} />
           </Panel>
@@ -322,14 +336,6 @@ export default function Dashboard() {
     </div>
   );
 }
-
-const tooltipStyle = {
-  background: "#181d2a",
-  border: "1px solid #2f3850",
-  borderRadius: 8,
-  fontSize: 12,
-  color: "#e2e8f0",
-};
 
 function ChartWrap({ children }: { children: React.ReactElement }) {
   return <ResponsiveContainer width="100%" height={220}>{children}</ResponsiveContainer>;
@@ -393,7 +399,15 @@ function BreakdownTable({ rows }: { rows: Analytics["genreBreakdown"] }) {
   );
 }
 
-function MiniList({ entries, onOpen }: { entries: MiniEntry[]; onOpen: (id: number) => void }) {
+function MiniList({
+  entries,
+  onOpen,
+  mode = "both",
+}: {
+  entries: MiniEntry[];
+  onOpen: (id: number) => void;
+  mode?: RatingMode;
+}) {
   if (entries.length === 0) return <Empty text="Nothing here yet." />;
   return (
     <div className="space-y-2">
@@ -409,8 +423,8 @@ function MiniList({ entries, onOpen }: { entries: MiniEntry[]; onOpen: (id: numb
             className="w-16 h-9 object-cover rounded"
           />
           <span className="flex-1 text-sm text-slate-200 truncate">{e.name}</span>
-          <Stars value={e.stars} />
-          {e.overall != null && (
+          {mode !== "detailed" && <Stars value={e.stars} />}
+          {mode !== "stars" && e.overall != null && (
             <span className={`text-xs font-semibold ${scoreColor(e.overall)}`}>
               {e.overall.toFixed(1)}
             </span>

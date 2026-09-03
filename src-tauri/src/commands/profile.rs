@@ -28,6 +28,24 @@ pub fn create_profile(state: tauri::State<AppState>, username: String) -> AppRes
 }
 
 #[tauri::command]
+pub fn rename_profile(
+    state: tauri::State<AppState>,
+    username: String,
+) -> AppResult<crate::models::Profile> {
+    let username = username.trim().to_string();
+    if username.is_empty() || username.len() > 32 {
+        return Err(AppError::msg("Username must be 1-32 characters."));
+    }
+    let conn = state.db.lock().unwrap();
+    let profile = read_profile(&conn)?.ok_or_else(|| AppError::msg("no profile"))?;
+    conn.execute(
+        "UPDATE profile SET username = ?1 WHERE id = ?2",
+        params![username, profile.id],
+    )?;
+    read_profile(&conn)?.ok_or_else(|| AppError::msg("profile rename failed"))
+}
+
+#[tauri::command]
 pub fn update_weights(
     state: tauri::State<AppState>,
     weights: CategoryWeights,
@@ -35,6 +53,9 @@ pub fn update_weights(
     let total = weights.gameplay + weights.story + weights.music + weights.technical;
     if total <= 0.0 || weights.gameplay < 0.0 || weights.story < 0.0 || weights.music < 0.0 || weights.technical < 0.0 {
         return Err(AppError::msg("Weights must be non-negative and not all zero."));
+    }
+    if (total - 100.0).abs() > f64::EPSILON {
+        return Err(AppError::msg("Weights must total exactly 100."));
     }
     let conn = state.db.lock().unwrap();
     let profile = read_profile(&conn)?.ok_or_else(|| AppError::msg("no profile"))?;
