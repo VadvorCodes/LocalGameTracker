@@ -77,8 +77,8 @@ export default function CustomThemeEditor({ initial, onSettle, disabled }: Props
         <span className="text-xs text-slate-400 font-mono">{colours.accent}</span>
       </div>
       <p className="text-xs text-slate-500">
-        The darker/lighter surface and accent shades are derived from these two colours
-        and saved automatically.
+        The darker/lighter surface and accent shades are derived from these two colours and saved
+        automatically.
       </p>
     </div>
   );

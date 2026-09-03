@@ -9,11 +9,7 @@ export default function MatchCard({ entry }: { entry: LibraryEntry }) {
   return (
     <div className="card overflow-hidden w-44 shrink-0">
       <div className="relative aspect-[16/9] overflow-hidden">
-        <CoverImage
-          url={entry.coverUrl}
-          alt={entry.name}
-          className="w-full h-full object-cover"
-        />
+        <CoverImage url={entry.coverUrl} alt={entry.name} className="w-full h-full object-cover" />
         <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-surface-900 to-transparent" />
       </div>
       <div className="p-2.5 space-y-1.5">

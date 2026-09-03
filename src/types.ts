@@ -106,8 +106,17 @@ export interface LibraryQuery {
 }
 
 export type SortKey =
-  | "name" | "added" | "releaseDate" | "playtime"
-  | "stars" | "score" | "gameplay" | "story" | "music" | "technical" | "ratedAt";
+  | "name"
+  | "added"
+  | "releaseDate"
+  | "playtime"
+  | "stars"
+  | "score"
+  | "gameplay"
+  | "story"
+  | "music"
+  | "technical"
+  | "ratedAt";
 
 export const SORT_LABELS: Record<SortKey, string> = {
   name: "Name",
@@ -148,7 +157,12 @@ export interface Analytics {
   highestRated: MiniEntry[];
   lowestRated: MiniEntry[];
   recentlyRated: MiniEntry[];
-  ratingTrend: { month: string; avgOverall: number | null; avgStars: number | null; count: number }[];
+  ratingTrend: {
+    month: string;
+    avgOverall: number | null;
+    avgStars: number | null;
+    count: number;
+  }[];
   categoryTrend: {
     month: string;
     gameplay: number | null;

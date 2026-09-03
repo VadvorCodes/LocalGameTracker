@@ -16,7 +16,16 @@ beforeEach(() => {
 
 describe("MatchCard", () => {
   it("renders the matched game's name, stars, score and status", () => {
-    render(<MatchCard entry={makeEntry({ name: "Celeste", starRating: 5, computedOverall: 91.4, status: "Completed" })} />);
+    render(
+      <MatchCard
+        entry={makeEntry({
+          name: "Celeste",
+          starRating: 5,
+          computedOverall: 91.4,
+          status: "Completed",
+        })}
+      />,
+    );
     expect(screen.getByTitle("Celeste")).toBeInTheDocument();
     expect(screen.getByTitle("5 / 5 stars")).toBeInTheDocument();
     expect(screen.getByText("91.4")).toBeInTheDocument();

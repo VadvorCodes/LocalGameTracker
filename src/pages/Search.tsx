@@ -64,7 +64,8 @@ export default function Search() {
       setOutcome(out);
       // Reflect what's already owned so cards show "In your library"
       // even after an app restart.
-      api.libraryQuery({})
+      api
+        .libraryQuery({})
         .then((entries) => setAdded(new Set(entries.map((e) => e.rawgId))))
         .catch(() => {});
     } catch (e) {
@@ -120,17 +121,13 @@ export default function Search() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pool, query, selGenres, selPlatforms, weights.text, weights.popularity, weights.recency]);
 
-  const genreOptions = useMemo(
-    () => [...new Set(pool.flatMap((g) => g.genres))].sort(),
-    [pool],
-  );
+  const genreOptions = useMemo(() => [...new Set(pool.flatMap((g) => g.genres))].sort(), [pool]);
   const platformOptions = useMemo(
     () => [...new Set(pool.flatMap((g) => g.platforms))].sort(),
     [pool],
   );
 
-  const activeFilters =
-    selGenres.size + selPlatforms.size + (fromYear ? 1 : 0) + (toYear ? 1 : 0);
+  const activeFilters = selGenres.size + selPlatforms.size + (fromYear ? 1 : 0) + (toYear ? 1 : 0);
 
   function toggle<T>(set: Set<T>, v: T): Set<T> {
     const next = new Set(set);
@@ -165,8 +162,7 @@ export default function Search() {
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
         {(Object.keys(PRESET_LABELS) as RankPreset[]).map((p) => {
-          const active =
-            p === "custom" ? preset === "custom" && customTouched : p === preset;
+          const active = p === "custom" ? preset === "custom" && customTouched : p === preset;
           return (
             <button
               key={p}
@@ -309,9 +305,7 @@ export default function Search() {
 
       {query.trim() && !loading && results.length === 0 && !error && (
         <div className="text-center text-slate-600 text-sm mt-24">
-          {pool.length > 0
-            ? "No results match your filters."
-            : `No games found for “${query}”.`}
+          {pool.length > 0 ? "No results match your filters." : `No games found for “${query}”.`}
         </div>
       )}
 

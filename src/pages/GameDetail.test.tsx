@@ -22,7 +22,15 @@ function renderDetail(route = "/game/5") {
   return render(
     <MemoryRouter initialEntries={[route]}>
       <Routes>
-        <Route path="/game/:id" element={<><NavProbe to="/game/6" /><GameDetail /></>} />
+        <Route
+          path="/game/:id"
+          element={
+            <>
+              <NavProbe to="/game/6" />
+              <GameDetail />
+            </>
+          }
+        />
         <Route path="/library" element={<div>library-page</div>} />
       </Routes>
     </MemoryRouter>,
@@ -208,9 +216,7 @@ describe("GameDetail — dates", () => {
     const [started, finished] = container.querySelectorAll<HTMLInputElement>('input[type="date"]');
     fireEvent.change(started, { target: { value: "2021-01-01" } });
     fireEvent.blur(started);
-    expect(
-      screen.getByText("Started date cannot be after the Finished date."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Started date cannot be after the Finished date.")).toBeInTheDocument();
     expect(apiMock.updateLibraryEntry).not.toHaveBeenCalled();
 
     // fixing the other side clears the error and patches
@@ -234,9 +240,7 @@ describe("GameDetail — notes", () => {
     await waitFor(() =>
       expect(apiMock.updateLibraryEntry).toHaveBeenCalledWith(5, { notes: "updated notes" }),
     );
-    await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Save notes" })).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save notes" })).toBeNull());
     expect(screen.getByText("← Back")).toBeEnabled();
   });
 
@@ -275,7 +279,10 @@ describe("GameDetail — detailed score", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Save score" }));
     expect(apiMock.setCategoryScores).toHaveBeenCalledWith(5, {
-      gameplay: 80, story: 60, music: null, technical: null,
+      gameplay: 80,
+      story: 60,
+      music: null,
+      technical: null,
     });
     await waitFor(() => expect(screen.getByText("library-page")).toBeInTheDocument());
   });
@@ -307,7 +314,10 @@ describe("GameDetail — detailed score", () => {
 
     await waitFor(() =>
       expect(apiMock.setCategoryScores).toHaveBeenCalledWith(5, {
-        gameplay: 80, story: null, music: null, technical: null,
+        gameplay: 80,
+        story: null,
+        music: null,
+        technical: null,
       }),
     );
     await waitFor(() =>
@@ -341,8 +351,6 @@ describe("GameDetail — quick rating and divergence", () => {
 
     apiMock.setStarRating.mockResolvedValueOnce(makeEntry({ id: 5, starRating: null }));
     fireEvent.click(screen.getByLabelText("4 stars")); // clears to null
-    await waitFor(() =>
-      expect(screen.queryByText(/well above your detailed score/)).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByText(/well above your detailed score/)).toBeNull());
   });
 });

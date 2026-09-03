@@ -41,8 +41,7 @@ export default function Library() {
   // Render and query through effectiveSort: if extended sorting is switched
   // off while an extended sort is active, fall back to Rating (keeping the
   // chosen direction) without ever rendering a mismatched select.
-  const effectiveSort =
-    extendedSorting || !EXTENDED_SORTS.includes(sort) ? sort : "stars";
+  const effectiveSort = extendedSorting || !EXTENDED_SORTS.includes(sort) ? sort : "stars";
 
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
@@ -69,7 +68,17 @@ export default function Library() {
     } finally {
       if (seq === loadSeq.current) setLoading(false);
     }
-  }, [search, statuses, favouritesOnly, selGenres, selPlatforms, minStars, minScore, effectiveSort, sortDesc]);
+  }, [
+    search,
+    statuses,
+    favouritesOnly,
+    selGenres,
+    selPlatforms,
+    minStars,
+    minScore,
+    effectiveSort,
+    sortDesc,
+  ]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
@@ -83,7 +92,8 @@ export default function Library() {
 
   useEffect(() => {
     let alive = true;
-    api.getGenresAndPlatforms()
+    api
+      .getGenresAndPlatforms()
       .then((info) => {
         if (alive) {
           setGenres(info.genres);
@@ -97,8 +107,12 @@ export default function Library() {
   }, [profile, entries.length]);
 
   const activeFilters =
-    statuses.size + (favouritesOnly ? 1 : 0) + selGenres.size + selPlatforms.size +
-    (minStars > 0 ? 1 : 0) + (minScore > 0 ? 1 : 0);
+    statuses.size +
+    (favouritesOnly ? 1 : 0) +
+    selGenres.size +
+    selPlatforms.size +
+    (minStars > 0 ? 1 : 0) +
+    (minScore > 0 ? 1 : 0);
 
   function toggle<T>(set: Set<T>, v: T): Set<T> {
     const next = new Set(set);
@@ -224,7 +238,10 @@ export default function Library() {
                 Min rating: <span className="text-slate-200">{minStars}</span>
               </div>
               <input
-                type="range" min={0} max={5} step={0.5}
+                type="range"
+                min={0}
+                max={5}
+                step={0.5}
                 value={minStars}
                 onChange={(e) => setMinStars(Number(e.target.value))}
                 className="w-48 accent-accent-500 select-none"
@@ -235,7 +252,10 @@ export default function Library() {
                 Min detailed rating: <span className="text-slate-200">{minScore}</span>
               </div>
               <input
-                type="range" min={0} max={100} step={5}
+                type="range"
+                min={0}
+                max={100}
+                step={5}
                 value={minScore}
                 onChange={(e) => setMinScore(Number(e.target.value))}
                 className="w-48 accent-accent-500 select-none"

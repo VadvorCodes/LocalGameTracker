@@ -44,13 +44,16 @@ pub fn search_cached(
     to_year: Option<i32>,
     limit: u32,
 ) -> AppResult<Vec<CachedGame>> {
-    const SELECT: &str = "SELECT rawg_id, name, cover_url, genres, platforms, release_date, developer, raw_json
+    const SELECT: &str =
+        "SELECT rawg_id, name, cover_url, genres, platforms, release_date, developer, raw_json
          FROM game_cache";
     let date_filtered = from_year.is_some() || to_year.is_some();
     let (sql, bind) = if date_filtered {
         (
-            format!("{SELECT} WHERE name LIKE ?1 AND release_date BETWEEN ?2 AND ?3
-                 ORDER BY CASE WHEN name LIKE ?4 THEN 0 ELSE 1 END, fetched_at DESC LIMIT ?5"),
+            format!(
+                "{SELECT} WHERE name LIKE ?1 AND release_date BETWEEN ?2 AND ?3
+                 ORDER BY CASE WHEN name LIKE ?4 THEN 0 ELSE 1 END, fetched_at DESC LIMIT ?5"
+            ),
             (
                 format!("{}-01-01", from_year.unwrap_or(1)),
                 format!("{}-12-31", to_year.unwrap_or(9999)),
@@ -58,8 +61,10 @@ pub fn search_cached(
         )
     } else {
         (
-            format!("{SELECT} WHERE name LIKE ?1
-                 ORDER BY CASE WHEN name LIKE ?2 THEN 0 ELSE 1 END, fetched_at DESC LIMIT ?3"),
+            format!(
+                "{SELECT} WHERE name LIKE ?1
+                 ORDER BY CASE WHEN name LIKE ?2 THEN 0 ELSE 1 END, fetched_at DESC LIMIT ?3"
+            ),
             ("0001-01-01".to_string(), "9999-12-31".to_string()),
         )
     };
@@ -76,7 +81,10 @@ pub fn search_cached(
             map_row,
         )?
     } else {
-        stmt.query_map(params![format!("%{}%", query), format!("{}%", query), limit], map_row)?
+        stmt.query_map(
+            params![format!("%{}%", query), format!("{}%", query), limit],
+            map_row,
+        )?
     };
     Ok(rows.filter_map(|x| x.ok()).collect())
 }
@@ -134,8 +142,20 @@ mod tests {
     #[test]
     fn reads_popularity_from_raw_json_and_tolerates_old_rows() {
         let conn = conn();
-        seed(&conn, 1, "Call of Duty", Some("2003-10-29"), r#"{"id":1,"name":"Call of Duty","added":1500,"metacritic":91}"#);
-        seed(&conn, 2, "Old Row Game", None, r#"{"id":2,"name":"Old Row Game"}"#);
+        seed(
+            &conn,
+            1,
+            "Call of Duty",
+            Some("2003-10-29"),
+            r#"{"id":1,"name":"Call of Duty","added":1500,"metacritic":91}"#,
+        );
+        seed(
+            &conn,
+            2,
+            "Old Row Game",
+            None,
+            r#"{"id":2,"name":"Old Row Game"}"#,
+        );
 
         let games = search_cached(&conn, "of duty", None, None, 10).unwrap();
         assert_eq!(games.len(), 1);
@@ -150,9 +170,27 @@ mod tests {
     #[test]
     fn year_range_filters_but_keeps_undated_rows_when_open() {
         let conn = conn();
-        seed(&conn, 1, "Alpha Game", Some("1998-05-01"), r#"{"id":1,"name":"Alpha Game"}"#);
-        seed(&conn, 2, "Alpha Game 2", Some("2020-05-01"), r#"{"id":2,"name":"Alpha Game 2"}"#);
-        seed(&conn, 3, "Alpha TBA", None, r#"{"id":3,"name":"Alpha TBA"}"#);
+        seed(
+            &conn,
+            1,
+            "Alpha Game",
+            Some("1998-05-01"),
+            r#"{"id":1,"name":"Alpha Game"}"#,
+        );
+        seed(
+            &conn,
+            2,
+            "Alpha Game 2",
+            Some("2020-05-01"),
+            r#"{"id":2,"name":"Alpha Game 2"}"#,
+        );
+        seed(
+            &conn,
+            3,
+            "Alpha TBA",
+            None,
+            r#"{"id":3,"name":"Alpha TBA"}"#,
+        );
 
         let all = search_cached(&conn, "Alpha", None, None, 10).unwrap();
         assert_eq!(all.len(), 3); // open range keeps everything, including undated

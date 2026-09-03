@@ -95,9 +95,11 @@ pub(crate) fn migrate(conn: &Connection) -> AppResult<()> {
         [],
     )?;
     let current: i64 = conn
-        .query_row("SELECT COALESCE(MAX(version), 0) FROM schema_version", [], |r| {
-            r.get(0)
-        })
+        .query_row(
+            "SELECT COALESCE(MAX(version), 0) FROM schema_version",
+            [],
+            |r| r.get(0),
+        )
         .unwrap_or(0);
 
     for (i, sql) in MIGRATIONS.iter().enumerate() {
@@ -122,10 +124,13 @@ mod tests {
         conn.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)", [])
             .unwrap();
         conn.execute_batch(MIGRATIONS[0]).unwrap();
-        conn.execute("INSERT INTO schema_version (version) VALUES (1)", []).unwrap();
+        conn.execute("INSERT INTO schema_version (version) VALUES (1)", [])
+            .unwrap();
         conn.execute_batch(MIGRATIONS[1]).unwrap();
-        conn.execute("INSERT INTO schema_version (version) VALUES (2)", []).unwrap();
-        conn.execute("INSERT INTO profile (username) VALUES ('tester')", []).unwrap();
+        conn.execute("INSERT INTO schema_version (version) VALUES (2)", [])
+            .unwrap();
+        conn.execute("INSERT INTO profile (username) VALUES ('tester')", [])
+            .unwrap();
         conn.execute(
             "INSERT INTO game_cache (rawg_id, name, raw_json) VALUES (1, 'Game 1', '{}')",
             [],
@@ -145,9 +150,11 @@ mod tests {
         migrate(&conn).unwrap(); // applies v3 on top
 
         let tag: String = conn
-            .query_row("SELECT rerated_at FROM rerate_tag WHERE library_entry_id = 1", [], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT rerated_at FROM rerate_tag WHERE library_entry_id = 1",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert!(!tag.is_empty());
         let dropped: i64 = conn

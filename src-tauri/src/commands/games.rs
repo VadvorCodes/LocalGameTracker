@@ -26,7 +26,10 @@ pub async fn search_games(
 ) -> AppResult<SearchOutcome> {
     let query = query.trim().to_string();
     if query.is_empty() {
-        return Ok(SearchOutcome { games: vec![], source: "live".into() });
+        return Ok(SearchOutcome {
+            games: vec![],
+            source: "live".into(),
+        });
     }
     let page = page.unwrap_or(1);
     let filters = filters.unwrap_or_default();
@@ -36,13 +39,19 @@ pub async fn search_games(
             let games: Vec<CachedGame> = resp.results.iter().map(CachedGame::from).collect();
             let conn = state.db.lock().unwrap();
             cache::upsert_games(&conn, &resp.results)?;
-            Ok(SearchOutcome { games, source: "live".into() })
+            Ok(SearchOutcome {
+                games,
+                source: "live".into(),
+            })
         }
         Err(_) => {
             let conn = state.db.lock().unwrap();
             let games =
                 cache::search_cached(&conn, &query, filters.from_year, filters.to_year, 40)?;
-            Ok(SearchOutcome { games, source: "cache".into() })
+            Ok(SearchOutcome {
+                games,
+                source: "cache".into(),
+            })
         }
     }
 }
@@ -55,11 +64,16 @@ pub async fn add_to_library(
 ) -> AppResult<LibraryEntry> {
     let status = PlayStatus::from_str(&status).ok_or_else(|| AppError::msg("invalid status"))?;
     let conn = state.db.lock().unwrap();
-    let profile = super::profile::read_profile(&conn)?.ok_or_else(|| AppError::msg("no profile"))?;
+    let profile =
+        super::profile::read_profile(&conn)?.ok_or_else(|| AppError::msg("no profile"))?;
 
     // The game must exist in the cache; upsert a minimal row if somehow missing.
     let exists: bool = conn
-        .query_row("SELECT 1 FROM game_cache WHERE rawg_id = ?1", params![game.rawg_id], |_| Ok(true))
+        .query_row(
+            "SELECT 1 FROM game_cache WHERE rawg_id = ?1",
+            params![game.rawg_id],
+            |_| Ok(true),
+        )
         .unwrap_or(false);
     if !exists {
         conn.execute(
@@ -136,27 +150,48 @@ pub fn update_library_entry(
     }
     if let Some(s) = &patch.status {
         PlayStatus::from_str(s).ok_or_else(|| AppError::msg("invalid status"))?;
-        conn.execute("UPDATE library_entry SET status = ?1 WHERE id = ?2", params![s, entry_id])?;
+        conn.execute(
+            "UPDATE library_entry SET status = ?1 WHERE id = ?2",
+            params![s, entry_id],
+        )?;
     }
     if let Some(f) = patch.favourite {
-        conn.execute("UPDATE library_entry SET favourite = ?1 WHERE id = ?2", params![f as i64, entry_id])?;
+        conn.execute(
+            "UPDATE library_entry SET favourite = ?1 WHERE id = ?2",
+            params![f as i64, entry_id],
+        )?;
     }
     if let Some(p) = patch.playtime_minutes {
         if p < 0 {
             return Err(AppError::msg("playtime cannot be negative"));
         }
-        conn.execute("UPDATE library_entry SET playtime_minutes = ?1 WHERE id = ?2", params![p, entry_id])?;
+        conn.execute(
+            "UPDATE library_entry SET playtime_minutes = ?1 WHERE id = ?2",
+            params![p, entry_id],
+        )?;
     }
     if let Some(d) = &patch.started_at {
-        conn.execute("UPDATE library_entry SET started_at = NULLIF(?1, '') WHERE id = ?2", params![d, entry_id])?;
+        conn.execute(
+            "UPDATE library_entry SET started_at = NULLIF(?1, '') WHERE id = ?2",
+            params![d, entry_id],
+        )?;
     }
     if let Some(d) = &patch.finished_at {
-        conn.execute("UPDATE library_entry SET finished_at = NULLIF(?1, '') WHERE id = ?2", params![d, entry_id])?;
+        conn.execute(
+            "UPDATE library_entry SET finished_at = NULLIF(?1, '') WHERE id = ?2",
+            params![d, entry_id],
+        )?;
     }
     if let Some(n) = &patch.notes {
-        conn.execute("UPDATE library_entry SET notes = ?1 WHERE id = ?2", params![n, entry_id])?;
+        conn.execute(
+            "UPDATE library_entry SET notes = ?1 WHERE id = ?2",
+            params![n, entry_id],
+        )?;
     }
-    let changed = conn.execute("UPDATE library_entry SET updated_at = datetime('now') WHERE id = ?1", params![entry_id])?;
+    let changed = conn.execute(
+        "UPDATE library_entry SET updated_at = datetime('now') WHERE id = ?1",
+        params![entry_id],
+    )?;
     if changed == 0 {
         return Err(AppError::msg("entry not found"));
     }
@@ -166,7 +201,10 @@ pub fn update_library_entry(
 #[tauri::command]
 pub fn remove_from_library(state: tauri::State<AppState>, entry_id: i64) -> AppResult<()> {
     let conn = state.db.lock().unwrap();
-    conn.execute("DELETE FROM rating WHERE library_entry_id = ?1", params![entry_id])?;
+    conn.execute(
+        "DELETE FROM rating WHERE library_entry_id = ?1",
+        params![entry_id],
+    )?;
     conn.execute("DELETE FROM library_entry WHERE id = ?1", params![entry_id])?;
     Ok(())
 }
@@ -208,20 +246,31 @@ pub fn library_query(
     query: LibraryQuery,
 ) -> AppResult<Vec<LibraryEntry>> {
     let conn = state.db.lock().unwrap();
-    let profile = super::profile::read_profile(&conn)?.ok_or_else(|| AppError::msg("no profile"))?;
+    let profile =
+        super::profile::read_profile(&conn)?.ok_or_else(|| AppError::msg("no profile"))?;
 
     let mut sql = String::from(ENTRY_FROM);
     sql.push_str(" WHERE e.profile_id = ?1");
     let mut args: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(profile.id)];
 
-    if let Some(s) = query.search.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(s) = query
+        .search
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         sql.push_str(" AND c.name LIKE ?");
         args.push(Box::new(format!("%{}%", s)));
     }
     if !query.statuses.is_empty() {
         sql.push_str(&format!(
             " AND e.status IN ({})",
-            query.statuses.iter().map(|_| "?").collect::<Vec<_>>().join(",")
+            query
+                .statuses
+                .iter()
+                .map(|_| "?")
+                .collect::<Vec<_>>()
+                .join(",")
         ));
         for s in &query.statuses {
             PlayStatus::from_str(s).ok_or_else(|| AppError::msg("invalid status filter"))?;
@@ -264,7 +313,11 @@ pub fn library_query(
         .find(|(k, _)| Some(*k) == query.sort.as_deref())
         .map(|(_, v)| *v)
         .unwrap_or("e.created_at");
-    let dir = if query.sort_desc.unwrap_or(true) { "DESC" } else { "ASC" };
+    let dir = if query.sort_desc.unwrap_or(true) {
+        "DESC"
+    } else {
+        "ASC"
+    };
     sql.push_str(&format!(
         " ORDER BY {sort_col} {dir} NULLS LAST, c.name COLLATE NOCASE ASC LIMIT 2000"
     ));
@@ -287,7 +340,8 @@ pub struct GenrePlatformInfo {
 #[tauri::command]
 pub fn get_genres_and_platforms(state: tauri::State<AppState>) -> AppResult<GenrePlatformInfo> {
     let conn = state.db.lock().unwrap();
-    let profile = super::profile::read_profile(&conn)?.ok_or_else(|| AppError::msg("no profile"))?;
+    let profile =
+        super::profile::read_profile(&conn)?.ok_or_else(|| AppError::msg("no profile"))?;
     let mut stmt = conn.prepare(
         "SELECT c.genres, c.platforms FROM library_entry e JOIN game_cache c ON c.rawg_id = e.rawg_id WHERE e.profile_id = ?1",
     )?;

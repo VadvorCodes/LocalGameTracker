@@ -37,8 +37,9 @@ const NAMES = [
   "cacheImage",
 ] as const;
 
-export const apiMock = Object.fromEntries(
-  NAMES.map((n) => [n, vi.fn()]),
-) as unknown as Record<(typeof NAMES)[number], ReturnType<typeof vi.fn>>;
+export const apiMock = Object.fromEntries(NAMES.map((n) => [n, vi.fn()])) as unknown as Record<
+  (typeof NAMES)[number],
+  ReturnType<typeof vi.fn>
+>;
 
 export const localCoverMock = vi.fn();

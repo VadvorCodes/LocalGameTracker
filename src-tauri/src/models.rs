@@ -11,7 +11,12 @@ pub struct CategoryWeights {
 
 impl Default for CategoryWeights {
     fn default() -> Self {
-        Self { gameplay: 25.0, story: 25.0, music: 25.0, technical: 25.0 }
+        Self {
+            gameplay: 25.0,
+            story: 25.0,
+            music: 25.0,
+            technical: 25.0,
+        }
     }
 }
 
@@ -122,6 +127,6 @@ pub struct LibraryQuery {
     pub max_stars: Option<f64>,
     pub min_score: Option<f64>,
     pub max_score: Option<f64>,
-    pub sort: Option<String>,      // see SORT list in games.rs
+    pub sort: Option<String>, // see SORT list in games.rs
     pub sort_desc: Option<bool>,
 }

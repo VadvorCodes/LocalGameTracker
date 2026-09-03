@@ -186,7 +186,10 @@ describe("General tab — weights", () => {
   });
 
   it("saves weights and refreshes the profile", async () => {
-    const updated = makeProfile({ username: "tester", categoryWeights: { gameplay: 20, story: 30, music: 25, technical: 25 } });
+    const updated = makeProfile({
+      username: "tester",
+      categoryWeights: { gameplay: 20, story: 30, music: 25, technical: 25 },
+    });
     apiMock.updateWeights.mockResolvedValueOnce(undefined);
     apiMock.getProfile.mockResolvedValueOnce(updated);
     renderModal();
@@ -196,9 +199,14 @@ describe("General tab — weights", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save weights" }));
 
     expect(apiMock.updateWeights).toHaveBeenCalledWith({
-      gameplay: 20, story: 30, music: 25, technical: 25,
+      gameplay: 20,
+      story: 30,
+      music: 25,
+      technical: 25,
     });
-    expect(await screen.findByText(/Weights saved — all detailed scores were recomputed/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Weights saved — all detailed scores were recomputed/),
+    ).toBeInTheDocument();
     expect(useApp.getState().profile).toEqual(updated);
   });
 
@@ -263,7 +271,9 @@ describe("Customisation tab — themes", () => {
 
   it("applies a preset's CSS immediately and persists it", async () => {
     apiMock.setTheme.mockImplementationOnce(async (theme: string) => ({
-      theme, customTheme: null, extendedSorting: false,
+      theme,
+      customTheme: null,
+      extendedSorting: false,
     }));
     renderModal();
     openCustomisationTab();
@@ -290,7 +300,9 @@ describe("Customisation tab — themes", () => {
 
   it("activates the custom theme with saved colours, or defaults", async () => {
     apiMock.setCustomTheme.mockImplementationOnce(async (base: string, accent: string) => ({
-      theme: "custom", customTheme: { base, accent }, extendedSorting: false,
+      theme: "custom",
+      customTheme: { base, accent },
+      extendedSorting: false,
     }));
     renderModal();
     openCustomisationTab();
@@ -349,7 +361,10 @@ describe("Customisation tab — themes", () => {
         await Promise.resolve();
       });
       expect(apiMock.setCustomTheme).toHaveBeenCalledWith("#102030", "#5b7cfa");
-      expect(useApp.getState().settings.customTheme).toEqual({ base: "#102030", accent: "#5b7cfa" });
+      expect(useApp.getState().settings.customTheme).toEqual({
+        base: "#102030",
+        accent: "#5b7cfa",
+      });
     } finally {
       vi.unstubAllGlobals();
       vi.useRealTimers();
@@ -389,7 +404,10 @@ describe("Customisation tab — themes", () => {
         await Promise.resolve();
         await Promise.resolve();
       });
-      expect(useApp.getState().settings.customTheme).toEqual({ base: "#0b0e14", accent: "#5b7cfa" });
+      expect(useApp.getState().settings.customTheme).toEqual({
+        base: "#0b0e14",
+        accent: "#5b7cfa",
+      });
       expect(document.documentElement.style.getPropertyValue("--surface-950")).toBe("11 14 20");
       expect(screen.getByText(/boom/)).toBeInTheDocument();
     } finally {

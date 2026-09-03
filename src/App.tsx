@@ -80,7 +80,9 @@ function SidebarUsername() {
       >
         {profile.username}
       </button>
-      <span className="opacity-0 group-hover/name:opacity-100 transition-opacity text-accent-400 ml-1">✎</span>
+      <span className="opacity-0 group-hover/name:opacity-100 transition-opacity text-accent-400 ml-1">
+        ✎
+      </span>
     </div>
   );
 }

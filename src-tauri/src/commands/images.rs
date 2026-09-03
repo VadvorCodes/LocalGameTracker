@@ -33,7 +33,11 @@ pub async fn cache_image(app: tauri::AppHandle, url: String) -> AppResult<String
     let path = dir.join(file_name);
 
     if !path.exists() {
-        let bytes = reqwest::get(&url).await?.error_for_status()?.bytes().await?;
+        let bytes = reqwest::get(&url)
+            .await?
+            .error_for_status()?
+            .bytes()
+            .await?;
         // Write atomically-ish: temp file then rename, so a partial download
         // never poisons the cache.
         let tmp = path.with_extension("part");

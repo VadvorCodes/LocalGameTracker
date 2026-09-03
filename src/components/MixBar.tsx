@@ -1,10 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  deriveBreakpoints,
-  setDivider,
-  type RankWeights,
-  type WeightKey,
-} from "../lib/searchRank";
+import { deriveBreakpoints, setDivider, type RankWeights, type WeightKey } from "../lib/searchRank";
 
 const SEGMENTS: { key: WeightKey; label: string; bar: string; dot: string }[] = [
   // Fixed colours, deliberately NOT the theme accent: the accent can be any
@@ -58,9 +53,7 @@ export default function MixBar({
     return (e: React.KeyboardEvent) => {
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
         e.preventDefault();
-        onChange(
-          setDivider(weights, divider, cuts[divider] + (e.key === "ArrowRight" ? 1 : -1)),
-        );
+        onChange(setDivider(weights, divider, cuts[divider] + (e.key === "ArrowRight" ? 1 : -1)));
       } else if (e.key === "Home" || e.key === "End") {
         e.preventDefault();
         onChange(setDivider(weights, divider, e.key === "Home" ? 0 : 100));

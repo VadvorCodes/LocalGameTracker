@@ -69,8 +69,7 @@ export const api = {
   setTheme: (theme: string) => invoke<UiSettings>("set_theme", { theme }),
   setCustomTheme: (base: string, accent: string) =>
     invoke<UiSettings>("set_custom_theme", { base, accent }),
-  setExtendedSorting: (enabled: boolean) =>
-    invoke<UiSettings>("set_extended_sorting", { enabled }),
+  setExtendedSorting: (enabled: boolean) => invoke<UiSettings>("set_extended_sorting", { enabled }),
 
   cacheImage: (url: string) => invoke<string>("cache_image", { url }),
 };

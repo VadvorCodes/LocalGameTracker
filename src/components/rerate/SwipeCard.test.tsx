@@ -145,10 +145,20 @@ describe("SwipeCard programmatic decisions", () => {
   it("does not fly again when the decision changes mid-flight", () => {
     const { card, onDecided, view } = renderCard();
     view.rerender(
-      <SwipeCard item={makePoolItem()} exitRequest="keep" onDecided={onDecided} onDragX={() => {}} />,
+      <SwipeCard
+        item={makePoolItem()}
+        exitRequest="keep"
+        onDecided={onDecided}
+        onDragX={() => {}}
+      />,
     );
     view.rerender(
-      <SwipeCard item={makePoolItem()} exitRequest="rerate" onDecided={onDecided} onDragX={() => {}} />,
+      <SwipeCard
+        item={makePoolItem()}
+        exitRequest="rerate"
+        onDecided={onDecided}
+        onDragX={() => {}}
+      />,
     );
     expect(card.style.transform).toContain("translateX(700px)"); // still flying keep
     transitionEnd(card, "transform");

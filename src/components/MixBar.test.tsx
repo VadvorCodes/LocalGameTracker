@@ -47,9 +47,7 @@ describe("MixBar", () => {
 
   it("dragging divider 0 reallocates between name match and popularity", () => {
     renderBar();
-    vi.spyOn(screen.getByTestId("mix-bar"), "getBoundingClientRect").mockReturnValue(
-      rect(0, 100),
-    );
+    vi.spyOn(screen.getByTestId("mix-bar"), "getBoundingClientRect").mockReturnValue(rect(0, 100));
 
     fireEvent.pointerDown(screen.getByRole("slider", { name: DIVIDER_0 }));
     fireEvent.pointerMove(window, { clientX: 20 });
@@ -73,9 +71,7 @@ describe("MixBar", () => {
 
   it("ignores pointer movement when no divider is being dragged", () => {
     renderBar();
-    vi.spyOn(screen.getByTestId("mix-bar"), "getBoundingClientRect").mockReturnValue(
-      rect(0, 100),
-    );
+    vi.spyOn(screen.getByTestId("mix-bar"), "getBoundingClientRect").mockReturnValue(rect(0, 100));
     fireEvent.pointerMove(window, { clientX: 50 });
     expect(onChange).not.toHaveBeenCalled();
   });

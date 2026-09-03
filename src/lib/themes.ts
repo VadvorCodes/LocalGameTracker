@@ -208,9 +208,7 @@ export function buildCustomVars(colours: CustomThemeColours): Record<string, str
   const MIN_SPAN = 0.06;
   const TIER_DELTAS = [0.04, 0.08, 0.13, 0.19];
   const stepUp = bl < READABLE_CEILING;
-  const span = stepUp
-    ? Math.min(MAX_SPAN, Math.max(READABLE_CEILING - bl, MIN_SPAN))
-    : MAX_SPAN;
+  const span = stepUp ? Math.min(MAX_SPAN, Math.max(READABLE_CEILING - bl, MIN_SPAN)) : MAX_SPAN;
   const surface = (dL: number) => {
     const l = stepUp ? bl + span * (dL / MAX_SPAN) : bl - span * (dL / MAX_SPAN);
     return triplet(hslToRgb(bh, bs, Math.min(1, Math.max(0, l))));

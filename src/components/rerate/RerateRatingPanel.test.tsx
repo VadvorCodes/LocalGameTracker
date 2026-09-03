@@ -72,9 +72,7 @@ describe("RerateRatingPanel rendering", () => {
 
   it("shows the divergence line only when a star draft and a preview both exist", () => {
     renderPanel();
-    expect(
-      screen.queryByText(/well above your detailed score/),
-    ).toBeNull();
+    expect(screen.queryByText(/well above your detailed score/)).toBeNull();
 
     fireEvent.click(screen.getByLabelText("4 stars"));
     const sliders = screen.getAllByRole("slider");
@@ -126,7 +124,10 @@ describe("RerateRatingPanel saving", () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(afterScores));
     expect(apiMock.setStarRating).toHaveBeenCalledWith(6, 4);
     expect(apiMock.setCategoryScores).toHaveBeenCalledWith(6, {
-      gameplay: 80, story: null, music: null, technical: null,
+      gameplay: 80,
+      story: null,
+      music: null,
+      technical: null,
     });
   });
 
@@ -137,9 +138,7 @@ describe("RerateRatingPanel saving", () => {
     fireEvent.click(screen.getByLabelText("4 stars")); // picker clears to null
     fireEvent.click(screen.getByRole("button", { name: "Save & continue" }));
 
-    await waitFor(() =>
-      expect(apiMock.setStarRating).toHaveBeenCalledWith(7, null),
-    );
+    await waitFor(() => expect(apiMock.setStarRating).toHaveBeenCalledWith(7, null));
   });
 
   it("skip makes zero API calls — the game stays untagged", () => {

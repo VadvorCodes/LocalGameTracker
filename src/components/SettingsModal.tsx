@@ -62,7 +62,8 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
       setThemeBusy(true);
       setThemeError(null);
       setSettings({ ...previous, theme: CUSTOM_THEME_ID, customTheme: colours });
-      api.setCustomTheme(colours.base, colours.accent)
+      api
+        .setCustomTheme(colours.base, colours.accent)
         .then(useApp.getState().setSettings)
         .catch((e) => {
           // Roll back the optimistic store write and CSS vars, like selectTheme.
@@ -254,9 +255,8 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
                 Extended sorting options
               </h3>
               <p className="text-xs text-slate-500 mb-3">
-                Adds the Other sorts (Release date, Playtime, Date rated) and the
-                per-category sorts (Gameplay, Story, Music, Technical) to the Library sort
-                menu.
+                Adds the Other sorts (Release date, Playtime, Date rated) and the per-category sorts
+                (Gameplay, Story, Music, Technical) to the Library sort menu.
               </p>
               <button
                 className={`chip py-1.5 ${
@@ -296,9 +296,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
                       max={100}
                       step={5}
                       value={weights[key]}
-                      onChange={(e) =>
-                        setWeights({ ...weights, [key]: Number(e.target.value) })
-                      }
+                      onChange={(e) => setWeights({ ...weights, [key]: Number(e.target.value) })}
                       className="w-full accent-accent-500 select-none"
                     />
                   </div>
@@ -385,7 +383,9 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
                       <span
                         key={n}
                         className="w-3.5 h-3.5"
-                        style={{ backgroundColor: `rgb(${customVars[n as keyof typeof customVars]})` }}
+                        style={{
+                          backgroundColor: `rgb(${customVars[n as keyof typeof customVars]})`,
+                        }}
                       />
                     ))}
                   </span>

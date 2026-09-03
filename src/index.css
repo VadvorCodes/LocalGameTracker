@@ -15,7 +15,9 @@
   --accent-600: 68 96 224;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
 }
 

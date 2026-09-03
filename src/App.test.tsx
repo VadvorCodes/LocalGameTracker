@@ -87,7 +87,9 @@ describe("App — boot sequence", () => {
     await appReady();
     expect(document.documentElement.style.getPropertyValue("--accent-500")).toBe("91 124 250");
     await act(async () => {
-      useApp.setState({ settings: { theme: "crimson", customTheme: null, extendedSorting: false } });
+      useApp.setState({
+        settings: { theme: "crimson", customTheme: null, extendedSorting: false },
+      });
     });
     expect(document.documentElement.style.getPropertyValue("--accent-500")).toBe("232 68 96");
   });

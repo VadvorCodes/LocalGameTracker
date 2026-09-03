@@ -193,7 +193,10 @@ describe("Dashboard — conditional sections", () => {
         avgOverall: 60,
         // the section needs at least one category average to render at all
         categoryAverages: { gameplay: 50, story: null, music: null, technical: null },
-        scoreDistribution: [{ x: 0, y: 0 }, { x: 10, y: 0 }],
+        scoreDistribution: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+        ],
       }),
     );
     renderDashboard();

@@ -41,10 +41,7 @@ afterEach(() => {
 describe("CustomThemeEditor", () => {
   it("shows the initial colours on both pickers", () => {
     const { container } = render(
-      <CustomThemeEditor
-        initial={{ base: "#0b0e14", accent: "#5b7cfa" }}
-        onSettle={() => {}}
-      />,
+      <CustomThemeEditor initial={{ base: "#0b0e14", accent: "#5b7cfa" }} onSettle={() => {}} />,
     );
     const pickers = container.querySelectorAll<HTMLInputElement>('input[type="color"]');
     expect(pickers[0].value).toBe("#0b0e14");
@@ -56,10 +53,7 @@ describe("CustomThemeEditor", () => {
   it("previews via a coalesced frame and settles once 400ms after the last change", () => {
     const onSettle = vi.fn();
     const { container } = render(
-      <CustomThemeEditor
-        initial={{ base: "#0b0e14", accent: "#5b7cfa" }}
-        onSettle={onSettle}
-      />,
+      <CustomThemeEditor initial={{ base: "#0b0e14", accent: "#5b7cfa" }} onSettle={onSettle} />,
     );
     const base = container.querySelector<HTMLInputElement>('input[type="color"]')!;
 
@@ -85,10 +79,7 @@ describe("CustomThemeEditor", () => {
   it("debounces rapid changes into a single settle with the final colours", () => {
     const onSettle = vi.fn();
     const { container } = render(
-      <CustomThemeEditor
-        initial={{ base: "#0b0e14", accent: "#5b7cfa" }}
-        onSettle={onSettle}
-      />,
+      <CustomThemeEditor initial={{ base: "#0b0e14", accent: "#5b7cfa" }} onSettle={onSettle} />,
     );
     const [base, accent] = container.querySelectorAll<HTMLInputElement>('input[type="color"]');
 
@@ -111,10 +102,7 @@ describe("CustomThemeEditor", () => {
   it("drops a pending settle when unmounted", () => {
     const onSettle = vi.fn();
     const { container, unmount } = render(
-      <CustomThemeEditor
-        initial={{ base: "#0b0e14", accent: "#5b7cfa" }}
-        onSettle={onSettle}
-      />,
+      <CustomThemeEditor initial={{ base: "#0b0e14", accent: "#5b7cfa" }} onSettle={onSettle} />,
     );
     fireEvent.change(container.querySelector<HTMLInputElement>('input[type="color"]')!, {
       target: { value: "#111111" },

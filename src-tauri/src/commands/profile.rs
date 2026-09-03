@@ -11,7 +11,10 @@ pub fn get_profile(state: tauri::State<AppState>) -> AppResult<Option<crate::mod
 }
 
 #[tauri::command]
-pub fn create_profile(state: tauri::State<AppState>, username: String) -> AppResult<crate::models::Profile> {
+pub fn create_profile(
+    state: tauri::State<AppState>,
+    username: String,
+) -> AppResult<crate::models::Profile> {
     let username = username.trim().to_string();
     if username.is_empty() || username.len() > 32 {
         return Err(AppError::msg("Username must be 1-32 characters."));
@@ -46,13 +49,17 @@ pub fn rename_profile(
 }
 
 #[tauri::command]
-pub fn update_weights(
-    state: tauri::State<AppState>,
-    weights: CategoryWeights,
-) -> AppResult<()> {
+pub fn update_weights(state: tauri::State<AppState>, weights: CategoryWeights) -> AppResult<()> {
     let total = weights.gameplay + weights.story + weights.music + weights.technical;
-    if total <= 0.0 || weights.gameplay < 0.0 || weights.story < 0.0 || weights.music < 0.0 || weights.technical < 0.0 {
-        return Err(AppError::msg("Weights must be non-negative and not all zero."));
+    if total <= 0.0
+        || weights.gameplay < 0.0
+        || weights.story < 0.0
+        || weights.music < 0.0
+        || weights.technical < 0.0
+    {
+        return Err(AppError::msg(
+            "Weights must be non-negative and not all zero.",
+        ));
     }
     if (total - 100.0).abs() > f64::EPSILON {
         return Err(AppError::msg("Weights must total exactly 100."));
@@ -85,8 +92,11 @@ pub fn update_weights(
     Ok(())
 }
 
-pub(crate) fn read_profile(conn: &rusqlite::Connection) -> AppResult<Option<crate::models::Profile>> {
-    let mut stmt = conn.prepare("SELECT id, username, category_weights, created_at FROM profile LIMIT 1")?;
+pub(crate) fn read_profile(
+    conn: &rusqlite::Connection,
+) -> AppResult<Option<crate::models::Profile>> {
+    let mut stmt =
+        conn.prepare("SELECT id, username, category_weights, created_at FROM profile LIMIT 1")?;
     let mut rows = stmt.query_map([], |r| {
         let weights_json: String = r.get(2)?;
         Ok(crate::models::Profile {

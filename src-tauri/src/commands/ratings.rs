@@ -42,15 +42,29 @@ pub fn set_category_scores(
     entry_id: i64,
     scores: CategoryScores,
 ) -> AppResult<LibraryEntry> {
-    for v in [scores.gameplay, scores.story, scores.music, scores.technical].into_iter().flatten() {
+    for v in [
+        scores.gameplay,
+        scores.story,
+        scores.music,
+        scores.technical,
+    ]
+    .into_iter()
+    .flatten()
+    {
         if !(0..=100).contains(&v) {
             return Err(AppError::msg("category scores must be between 0 and 100"));
         }
     }
     let conn = state.db.lock().unwrap();
-    let profile = super::profile::read_profile(&conn)?.ok_or_else(|| AppError::msg("no profile"))?;
-    let overall =
-        crate::scoring::compute_overall(scores.gameplay, scores.story, scores.music, scores.technical, &profile.category_weights);
+    let profile =
+        super::profile::read_profile(&conn)?.ok_or_else(|| AppError::msg("no profile"))?;
+    let overall = crate::scoring::compute_overall(
+        scores.gameplay,
+        scores.story,
+        scores.music,
+        scores.technical,
+        &profile.category_weights,
+    );
 
     upsert_rating(&conn, entry_id, |sql_args| {
         sql_args.push(("gameplay", scores.gameplay.map(|v| v as f64)));
@@ -81,7 +95,11 @@ fn upsert_rating(
         .map(|(col, v)| {
             format!(
                 "{col} = {}",
-                if v.is_none() { String::from("NULL") } else { String::from("?") }
+                if v.is_none() {
+                    String::from("NULL")
+                } else {
+                    String::from("?")
+                }
             )
         })
         .collect();
@@ -95,6 +113,9 @@ fn upsert_rating(
         .map(|(_, v)| Box::new(v) as Box<dyn rusqlite::types::ToSql>)
         .collect();
     params_vec.push(Box::new(entry_id));
-    conn.execute(&sql, rusqlite::params_from_iter(params_vec.iter().map(|b| b.as_ref())))?;
+    conn.execute(
+        &sql,
+        rusqlite::params_from_iter(params_vec.iter().map(|b| b.as_ref())),
+    )?;
     Ok(())
 }

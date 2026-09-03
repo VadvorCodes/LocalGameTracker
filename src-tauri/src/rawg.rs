@@ -42,7 +42,10 @@ pub struct RawgClient {
 
 impl RawgClient {
     pub fn new(api_key: Option<String>) -> Self {
-        Self { http: reqwest::Client::new(), api_key: RwLock::new(api_key) }
+        Self {
+            http: reqwest::Client::new(),
+            api_key: RwLock::new(api_key),
+        }
     }
 
     pub fn set_api_key(&self, key: Option<String>) {
@@ -74,7 +77,10 @@ impl RawgClient {
             .send()
             .await?;
         if !resp.status().is_success() {
-            return Err(AppError::msg(format!("rawg-http-{}", resp.status().as_u16())));
+            return Err(AppError::msg(format!(
+                "rawg-http-{}",
+                resp.status().as_u16()
+            )));
         }
         Ok(resp.json().await?)
     }
@@ -120,7 +126,10 @@ impl From<&RawgGame> for CachedGame {
                 .map(|p| p.platform.name.clone())
                 .collect(),
             release_date: g.released.clone(),
-            developer: g.developers.as_ref().and_then(|d| d.first().map(|x| x.name.clone())),
+            developer: g
+                .developers
+                .as_ref()
+                .and_then(|d| d.first().map(|x| x.name.clone())),
             added: g.added,
             metacritic: g.metacritic,
         }
@@ -157,7 +166,10 @@ mod tests {
         let p = build_search_params("KEY", "zelda", 2, &filters);
         assert!(p.contains(&("dates".to_string(), "2000-01-01,2035-12-31".to_string())));
         assert!(p.contains(&("exclude_additions".to_string(), "true".to_string())));
-        let to_only = SearchFilters { to_year: Some(2010), ..Default::default() };
+        let to_only = SearchFilters {
+            to_year: Some(2010),
+            ..Default::default()
+        };
         let p = build_search_params("KEY", "x", 1, &to_only);
         assert!(p.contains(&("dates".to_string(), "1970-01-01,2010-12-31".to_string())));
     }

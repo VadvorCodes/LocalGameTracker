@@ -54,7 +54,10 @@ beforeEach(() => {
   vi.resetAllMocks();
   localCoverMock.mockResolvedValue(null);
   apiMock.libraryQuery.mockResolvedValue([]);
-  apiMock.getGenresAndPlatforms.mockResolvedValue({ genres: ["RPG", "Indie"], platforms: ["PC", "Switch"] });
+  apiMock.getGenresAndPlatforms.mockResolvedValue({
+    genres: ["RPG", "Indie"],
+    platforms: ["PC", "Switch"],
+  });
   useApp.setState({
     profile: makeProfile(),
     profileLoading: false,
@@ -95,7 +98,9 @@ describe("Library — loading and the query it sends", () => {
       vi.advanceTimersByTime(199);
     });
     expect(apiMock.libraryQuery).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByPlaceholderText("Filter by name…"), { target: { value: "zelda" } });
+    fireEvent.change(screen.getByPlaceholderText("Filter by name…"), {
+      target: { value: "zelda" },
+    });
     await flushLoad();
     expect(apiMock.libraryQuery).toHaveBeenCalledTimes(1);
     expect(lastQuery().search).toBe("zelda");

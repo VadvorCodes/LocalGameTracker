@@ -17,7 +17,12 @@ beforeEach(() => {
 
 describe("GameCard", () => {
   it("renders name, status label and stars", () => {
-    render(<GameCard entry={makeEntry({ name: "Hollow Knight", status: "Completed", starRating: 4.5 })} onOpen={() => {}} />);
+    render(
+      <GameCard
+        entry={makeEntry({ name: "Hollow Knight", status: "Completed", starRating: 4.5 })}
+        onOpen={() => {}}
+      />,
+    );
     expect(screen.getByText("Hollow Knight")).toBeInTheDocument();
     expect(screen.getByText("Completed")).toBeInTheDocument();
     expect(screen.getByTitle("4.5 / 5 stars")).toBeInTheDocument();
@@ -59,7 +64,10 @@ describe("GameCard", () => {
 
     rerender(
       <GameCard
-        entry={makeEntry({ playtimeMinutes: 125, genres: ["RPG", "Action", "Adventure", " Indie"] })}
+        entry={makeEntry({
+          playtimeMinutes: 125,
+          genres: ["RPG", "Action", "Adventure", " Indie"],
+        })}
         onOpen={() => {}}
       />,
     );

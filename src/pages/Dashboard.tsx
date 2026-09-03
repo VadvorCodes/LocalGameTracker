@@ -1,9 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, PolarAngleAxis,
-  PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer, Tooltip,
-  XAxis, YAxis,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  PolarAngleAxis,
+  PolarGrid,
+  PolarRadiusAxis,
+  Radar,
+  RadarChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from "recharts";
 import { api } from "../api";
 import type { Analytics, MiniEntry } from "../types";
@@ -97,9 +110,7 @@ export default function Dashboard() {
               const pct = a.totalGames > 0 ? (count / a.totalGames) * 100 : 0;
               return (
                 <div key={s} className="flex items-center gap-3">
-                  <span className="text-xs text-slate-400 w-24 shrink-0">
-                    {STATUS_LABELS[s]}
-                  </span>
+                  <span className="text-xs text-slate-400 w-24 shrink-0">{STATUS_LABELS[s]}</span>
                   <div className="flex-1 h-5 bg-surface-800 rounded overflow-hidden">
                     <div
                       className={`h-full ${STATUS_COLORS[s].split(" ")[0]}`}
@@ -122,7 +133,10 @@ export default function Dashboard() {
                 <Tooltip contentStyle={tooltipStyle} />
                 <Bar dataKey="y" radius={[4, 4, 0, 0]}>
                   {a.starDistribution.map((d) => (
-                    <Cell key={d.x} fill={d.x >= 3.5 ? "#34d399" : d.x >= 2 ? "#fbbf24" : "#fb7185"} />
+                    <Cell
+                      key={d.x}
+                      fill={d.x >= 3.5 ? "#34d399" : d.x >= 2 ? "#fbbf24" : "#fb7185"}
+                    />
                   ))}
                 </Bar>
               </BarChart>
@@ -159,8 +173,17 @@ export default function Dashboard() {
                 <PolarGrid stroke={palette.polarGrid} />
                 <PolarAngleAxis dataKey="cat" tick={{ fill: "#94a3b8", fontSize: 12 }} />
                 <PolarRadiusAxis domain={[0, 100]} tick={{ fill: "#475569", fontSize: 10 }} />
-                <Radar dataKey="v" name="Average" stroke={palette.accent} fill={palette.accent} fillOpacity={0.35} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(value) => Number(value).toFixed(1)} />
+                <Radar
+                  dataKey="v"
+                  name="Average"
+                  stroke={palette.accent}
+                  fill={palette.accent}
+                  fillOpacity={0.35}
+                />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(value) => Number(value).toFixed(1)}
+                />
               </RadarChart>
             </ChartWrap>
           </Panel>
@@ -193,7 +216,13 @@ export default function Dashboard() {
                 <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 11 }} />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Line type="monotone" dataKey="avgOverall" name="Detailed (0-100)" stroke={palette.accent} dot />
+                <Line
+                  type="monotone"
+                  dataKey="avgOverall"
+                  name="Detailed (0-100)"
+                  stroke={palette.accent}
+                  dot
+                />
                 <Line type="monotone" dataKey="avgStars" name="Stars (×20)" stroke="#fbbf24" dot />
               </LineChart>
             </ChartWrap>
@@ -266,9 +295,7 @@ export default function Dashboard() {
             <BreakdownTable rows={a.genreBreakdown} />
           </Panel>
           <Panel title="Recently rated">
-            <p className="text-xs text-slate-500 mb-3">
-              Your three latest rated games.
-            </p>
+            <p className="text-xs text-slate-500 mb-3">Your three latest rated games.</p>
             <MiniList entries={a.recentlyRated} onOpen={(id) => navigate(`/game/${id}`)} />
           </Panel>
         </div>
@@ -298,7 +325,11 @@ export default function Dashboard() {
               </div>
             }
           >
-            <MiniList entries={a.highestRated} onOpen={(id) => navigate(`/game/${id}`)} mode={ratingMode} />
+            <MiniList
+              entries={a.highestRated}
+              onOpen={(id) => navigate(`/game/${id}`)}
+              mode={ratingMode}
+            />
           </Panel>
           <Panel
             title="Lowest rated"
@@ -312,7 +343,11 @@ export default function Dashboard() {
               </span>
             }
           >
-            <MiniList entries={a.lowestRated} onOpen={(id) => navigate(`/game/${id}`)} mode={ratingMode} />
+            <MiniList
+              entries={a.lowestRated}
+              onOpen={(id) => navigate(`/game/${id}`)}
+              mode={ratingMode}
+            />
           </Panel>
         </div>
       )}
@@ -338,11 +373,17 @@ export default function Dashboard() {
 }
 
 function ChartWrap({ children }: { children: React.ReactElement }) {
-  return <ResponsiveContainer width="100%" height={220}>{children}</ResponsiveContainer>;
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      {children}
+    </ResponsiveContainer>
+  );
 }
 
 function Empty({ text }: { text: string }) {
-  return <div className="h-[220px] flex items-center justify-center text-sm text-slate-600">{text}</div>;
+  return (
+    <div className="h-[220px] flex items-center justify-center text-sm text-slate-600">{text}</div>
+  );
 }
 
 function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {
@@ -385,7 +426,10 @@ function BreakdownTable({ rows }: { rows: Analytics["genreBreakdown"] }) {
             {r.label}
           </span>
           <div className="flex-1 h-4 bg-surface-800 rounded overflow-hidden">
-            <div className="h-full bg-accent-600/70" style={{ width: `${(r.count / max) * 100}%` }} />
+            <div
+              className="h-full bg-accent-600/70"
+              style={{ width: `${(r.count / max) * 100}%` }}
+            />
           </div>
           <span className="text-slate-500 w-24 text-right">
             {r.count}
@@ -417,11 +461,7 @@ function MiniList({
           className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-surface-800 text-left transition-colors"
           onClick={() => onOpen(e.entryId)}
         >
-          <CoverImage
-            url={e.coverUrl}
-            alt={e.name}
-            className="w-16 h-9 object-cover rounded"
-          />
+          <CoverImage url={e.coverUrl} alt={e.name} className="w-16 h-9 object-cover rounded" />
           <span className="flex-1 text-sm text-slate-200 truncate">{e.name}</span>
           {mode !== "detailed" && <Stars value={e.stars} />}
           {mode !== "stars" && e.overall != null && (

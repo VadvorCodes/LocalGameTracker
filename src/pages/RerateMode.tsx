@@ -262,8 +262,8 @@ export default function RerateMode() {
           />
 
           <p className="text-xs text-slate-500 text-center">
-            Drag the card left to re-rate it, right to keep its rating — or use the
-            buttons / arrow keys.
+            Drag the card left to re-rate it, right to keep its rating — or use the buttons / arrow
+            keys.
           </p>
 
           <div
@@ -286,10 +286,7 @@ export default function RerateMode() {
             />
           </div>
 
-          <div
-            className="transition-opacity duration-150"
-            style={{ opacity: dragX !== 0 ? 0 : 1 }}
-          >
+          <div className="transition-opacity duration-150" style={{ opacity: dragX !== 0 ? 0 : 1 }}>
             {item.similar.length > 0 && (
               <div className="max-w-3xl">
                 <h3 className="text-[11px] uppercase tracking-wide text-slate-500 mb-2 text-center">
@@ -315,8 +312,8 @@ export default function RerateMode() {
           <div>
             <h1 className="text-xl font-semibold text-white">Cycle review</h1>
             <p className="text-sm text-slate-500 mt-1">
-              Click a game to move it between piles, or drag it — dragging within a pile
-              reorders it, which is the order the re-rating follows.
+              Click a game to move it between piles, or drag it — dragging within a pile reorders
+              it, which is the order the re-rating follows.
             </p>
           </div>
           <button
@@ -380,9 +377,8 @@ export default function RerateMode() {
         <header className="mb-6">
           <h1 className="text-xl font-semibold text-white">Re-rating</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Game {rerateIdx + 1} of {rerateQueue.length} — update the scores that no
-            longer feel right. Skipped games keep their rating and stay eligible for
-            future cycles.
+            Game {rerateIdx + 1} of {rerateQueue.length} — update the scores that no longer feel
+            right. Skipped games keep their rating and stay eligible for future cycles.
           </p>
         </header>
         <div className="flex-1 flex items-start justify-center">
@@ -405,8 +401,8 @@ export default function RerateMode() {
         <div>
           <h1 className="text-xl font-semibold text-white">Cycle complete</h1>
           <p className="text-sm text-slate-500 mt-2">
-            {summary.rerated} re-rated · {summary.skipped} skipped · {kept} kept their
-            rating. Re-rated games sit out the next cycle, then become eligible again.
+            {summary.rerated} re-rated · {summary.skipped} skipped · {kept} kept their rating.
+            Re-rated games sit out the next cycle, then become eligible again.
           </p>
         </div>
         <div className="flex gap-3">
@@ -433,10 +429,10 @@ export default function RerateMode() {
     <div className="p-8 max-w-2xl mx-auto h-full flex flex-col">
       <h1 className="text-xl font-semibold text-white">Re-Rate Mode</h1>
       <p className="text-sm text-slate-500 mt-2 leading-relaxed">
-        Revisit old ratings with fresh eyes. A cycle shows you {cycleSize} of your games
-        one at a time — swipe left on the ones whose rating no longer feels right, right
-        on the ones you stand by. Afterwards you re-rate the left pile individually.
-        Games you re-rate sit out the next cycle.
+        Revisit old ratings with fresh eyes. A cycle shows you {cycleSize} of your games one at a
+        time — swipe left on the ones whose rating no longer feels right, right on the ones you
+        stand by. Afterwards you re-rate the left pile individually. Games you re-rate sit out the
+        next cycle.
       </p>
 
       <div className="card p-5 mt-6 space-y-4">
@@ -485,8 +481,8 @@ export default function RerateMode() {
         )}
         {inScope >= 2 && eligible < 2 && (
           <p className="text-xs text-amber-400">
-            Everything in scope is cooling down — starting now resets the cooldown
-            and puts all {inScope} games back in the pool.
+            Everything in scope is cooling down — starting now resets the cooldown and puts all{" "}
+            {inScope} games back in the pool.
           </p>
         )}
         {error && <p className="text-xs text-rose-400">{error}</p>}
@@ -608,7 +604,12 @@ function PileList({
     let over = -1;
     for (let k = 0; k < rows.length; k++) {
       const r = rects[k];
-      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+      if (
+        e.clientX >= r.left &&
+        e.clientX <= r.right &&
+        e.clientY >= r.top &&
+        e.clientY <= r.bottom
+      ) {
         over = k;
         break;
       }
@@ -673,7 +674,9 @@ function PileList({
               key={entry.id}
               entry={entry}
               dragging={draggedId === entry.id}
-              dropBefore={dropIndex != null && dropEdge != null && items[dropIndex]?.entry.id === entry.id}
+              dropBefore={
+                dropIndex != null && dropEdge != null && items[dropIndex]?.entry.id === entry.id
+              }
               dropEdge={dropEdge}
               onToggle={onToggle}
               onDragStart={onDragStart}
@@ -725,7 +728,11 @@ function PileRow({
         title="Click to move to the other pile, drag to reorder"
       >
         <div className="w-20 h-12 rounded overflow-hidden shrink-0 bg-surface-800">
-          <CoverImage url={entry.coverUrl} alt={entry.name} className="w-full h-full object-cover" />
+          <CoverImage
+            url={entry.coverUrl}
+            alt={entry.name}
+            className="w-full h-full object-cover"
+          />
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm text-slate-100 truncate">{entry.name}</div>

@@ -217,9 +217,7 @@ describe("Search — results rendering", () => {
   it("marks cache-sourced results with the offline chip", async () => {
     renderSearch();
     await searchFor("halo", { games: [game()], source: "cache" });
-    expect(
-      screen.getByText("Offline — showing results from your local cache"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Offline — showing results from your local cache")).toBeInTheDocument();
   });
 
   it("renders the meta line as year · developer · first two genres", async () => {
@@ -262,9 +260,30 @@ describe("Search — ranking and filters", () => {
     return {
       source: "live",
       games: [
-        game({ rawgId: 1, name: "Call of Duty", releaseDate: "2003-10-29", added: 1500, genres: ["Action"], platforms: ["Xbox"] }),
-        game({ rawgId: 2, name: "Call of Duty: Modern Warfare II", releaseDate: "2022-10-28", added: 5300, genres: ["Shooter"], platforms: ["PC"] }),
-        game({ rawgId: 3, name: "Call of Duty: Vanguard", releaseDate: "2021-11-05", added: 2000, genres: ["Action"], platforms: ["Xbox"] }),
+        game({
+          rawgId: 1,
+          name: "Call of Duty",
+          releaseDate: "2003-10-29",
+          added: 1500,
+          genres: ["Action"],
+          platforms: ["Xbox"],
+        }),
+        game({
+          rawgId: 2,
+          name: "Call of Duty: Modern Warfare II",
+          releaseDate: "2022-10-28",
+          added: 5300,
+          genres: ["Shooter"],
+          platforms: ["PC"],
+        }),
+        game({
+          rawgId: 3,
+          name: "Call of Duty: Vanguard",
+          releaseDate: "2021-11-05",
+          added: 2000,
+          genres: ["Action"],
+          platforms: ["Xbox"],
+        }),
       ],
     };
   }

@@ -28,7 +28,10 @@ beforeEach(() => {
 
 describe("api wrappers", () => {
   it("get_profile / create_profile / rename_profile", async () => {
-    invokeMock.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 1 }).mockResolvedValueOnce({ id: 1, username: "new" });
+    invokeMock
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 1 })
+      .mockResolvedValueOnce({ id: 1, username: "new" });
     expect(await api.getProfile()).toBeNull();
     await api.createProfile("alice");
     await api.renameProfile("bob");
@@ -173,7 +176,9 @@ describe("localCover", () => {
 
   it("maps a cached path through convertFileSrc", async () => {
     invokeMock.mockResolvedValueOnce("C:\\cache\\img.jpg");
-    expect(await localCover("https://example.com/c.jpg")).toBe("asset://localhost/C:\\cache\\img.jpg");
+    expect(await localCover("https://example.com/c.jpg")).toBe(
+      "asset://localhost/C:\\cache\\img.jpg",
+    );
     expect(convertMock).toHaveBeenCalledWith("C:\\cache\\img.jpg");
   });
 

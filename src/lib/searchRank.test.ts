@@ -138,7 +138,12 @@ describe("rankGames", () => {
     game({ rawgId: 1, name: "Call of Duty", releaseDate: "2003-10-29", added: 1500 }),
     game({ rawgId: 2, name: "Call of Duty: Mobile", releaseDate: "2019-10-01", added: 900 }),
     game({ rawgId: 3, name: "Call of Duty: Vanguard", releaseDate: "2021-11-05", added: 2000 }),
-    game({ rawgId: 4, name: "Call of Duty: Modern Warfare II", releaseDate: "2022-10-28", added: 5300 }),
+    game({
+      rawgId: 4,
+      name: "Call of Duty: Modern Warfare II",
+      releaseDate: "2022-10-28",
+      added: 5300,
+    }),
   ];
 
   it("balanced weights rank the modern popular entry first, original last", () => {
@@ -164,7 +169,12 @@ describe("rankGames", () => {
   });
 
   it("falls back to balanced when all weights are zero", () => {
-    const zero = rankGames(callOfDutyGames, "call of duty", { text: 0, popularity: 0, recency: 0 }, NOW);
+    const zero = rankGames(
+      callOfDutyGames,
+      "call of duty",
+      { text: 0, popularity: 0, recency: 0 },
+      NOW,
+    );
     const balanced = rankGames(callOfDutyGames, "call of duty", RANK_PRESETS.balanced, NOW);
     expect(zero.map((g) => g.rawgId)).toEqual(balanced.map((g) => g.rawgId));
   });

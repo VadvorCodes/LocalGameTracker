@@ -27,8 +27,8 @@ export default function Onboarding() {
         <div className="text-5xl mb-4">🎮</div>
         <h1 className="text-2xl font-bold text-white mb-2">Welcome to GameTracker</h1>
         <p className="text-sm text-slate-400 mb-8 leading-relaxed">
-          Your private, offline-first game library. No account, no cloud — everything stays on
-          this machine.
+          Your private, offline-first game library. No account, no cloud — everything stays on this
+          machine.
         </p>
         <input
           className="input w-full text-center"

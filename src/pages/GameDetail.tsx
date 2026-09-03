@@ -46,7 +46,10 @@ export default function GameDetail() {
   const [hours, setHours] = useState("0");
   const [hoursPreset, setHoursPreset] = useState("0");
   const [catDraft, setCatDraft] = useState<Record<CatKey, number | null>>({
-    gameplay: null, story: null, music: null, technical: null,
+    gameplay: null,
+    story: null,
+    music: null,
+    technical: null,
   });
   // Dates are drafted locally and committed on blur: committing on every
   // keystroke let the backend round-trip clobber half-typed values.
@@ -58,21 +61,27 @@ export default function GameDetail() {
   useEffect(() => {
     if (!Number.isFinite(entryId)) return;
     const seq = ++loadSeq.current;
-    api.getLibraryEntry(entryId).then((e) => {
-      if (seq !== loadSeq.current) return; // navigated to another entry meanwhile
-      setEntry(e);
-      setNotes(e.notes);
-      const loadedHours = String(Math.floor(e.playtimeMinutes / 60));
-      setHours(loadedHours);
-      setHoursPreset(hoursPresetFor(loadedHours));
-      setStartedDraft(e.startedAt?.slice(0, 10) ?? "");
-      setFinishedDraft(e.finishedAt?.slice(0, 10) ?? "");
-      setCatDraft({
-        gameplay: e.gameplay, story: e.story, music: e.music, technical: e.technical,
+    api
+      .getLibraryEntry(entryId)
+      .then((e) => {
+        if (seq !== loadSeq.current) return; // navigated to another entry meanwhile
+        setEntry(e);
+        setNotes(e.notes);
+        const loadedHours = String(Math.floor(e.playtimeMinutes / 60));
+        setHours(loadedHours);
+        setHoursPreset(hoursPresetFor(loadedHours));
+        setStartedDraft(e.startedAt?.slice(0, 10) ?? "");
+        setFinishedDraft(e.finishedAt?.slice(0, 10) ?? "");
+        setCatDraft({
+          gameplay: e.gameplay,
+          story: e.story,
+          music: e.music,
+          technical: e.technical,
+        });
+      })
+      .catch((err) => {
+        if (seq === loadSeq.current) setError(String(err));
       });
-    }).catch((err) => {
-      if (seq === loadSeq.current) setError(String(err));
-    });
   }, [entryId]);
 
   if (error) {
@@ -96,7 +105,10 @@ export default function GameDetail() {
   }
 
   const weights: CategoryWeights = profile?.categoryWeights ?? {
-    gameplay: 25, story: 25, music: 25, technical: 25,
+    gameplay: 25,
+    story: 25,
+    music: 25,
+    technical: 25,
   };
 
   // Dirty = draft differs from what's actually saved, so the Save button
@@ -213,7 +225,9 @@ export default function GameDetail() {
                   entry.developer,
                   entry.releaseDate ? formatDate(entry.releaseDate) : null,
                   ...entry.genres.slice(0, 3),
-                ].filter(Boolean).join(" · ")}
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </p>
             </div>
             <div className="flex gap-2">
@@ -280,7 +294,9 @@ export default function GameDetail() {
                 {hoursPreset === HOURS_CUSTOM && (
                   <input
                     className="input w-full mt-2"
-                    type="number" min={0} step={1}
+                    type="number"
+                    min={0}
+                    step={1}
                     value={hours}
                     onChange={(e) => setHours(e.target.value)}
                     onBlur={savePlaytime}
@@ -309,9 +325,7 @@ export default function GameDetail() {
                 />
               </label>
             </section>
-            {dateError && (
-              <p className="text-xs text-rose-400 -mt-3">{dateError}</p>
-            )}
+            {dateError && <p className="text-xs text-rose-400 -mt-3">{dateError}</p>}
             {entry.playtimeMinutes > 0 && (
               <p className="text-xs text-slate-500 -mt-3">
                 Tracked: {formatPlaytime(entry.playtimeMinutes)}
@@ -369,12 +383,13 @@ export default function GameDetail() {
                         {label}
                         <span className="text-slate-500"> ({weights[key].toFixed(0)}%)</span>
                       </span>
-                      <span className="font-mono text-slate-400">
-                        {catDraft[key] ?? "—"}
-                      </span>
+                      <span className="font-mono text-slate-400">{catDraft[key] ?? "—"}</span>
                     </div>
                     <input
-                      type="range" min={0} max={100} step={1}
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={1}
                       value={catDraft[key] ?? 50}
                       onChange={(e) => {
                         setCatDraft({ ...catDraft, [key]: Number(e.target.value) });
@@ -405,7 +420,9 @@ export default function GameDetail() {
                   <div className="text-[11px] text-slate-500 uppercase tracking-wide">
                     Overall (weighted)
                   </div>
-                  <div className={`text-3xl font-bold ${previewOverall != null ? scoreColor(previewOverall) : "text-slate-600"}`}>
+                  <div
+                    className={`text-3xl font-bold ${previewOverall != null ? scoreColor(previewOverall) : "text-slate-600"}`}
+                  >
                     {previewOverall != null ? previewOverall.toFixed(1) : "—"}
                     <span className="text-sm text-slate-500 font-normal"> / 100</span>
                   </div>

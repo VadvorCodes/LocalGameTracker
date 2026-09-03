@@ -22,7 +22,10 @@ pub const DEFAULT_THEME: &str = "midnight";
 
 fn ui_settings(settings: &crate::settings::Settings) -> UiSettings {
     UiSettings {
-        theme: settings.theme.clone().unwrap_or_else(|| DEFAULT_THEME.into()),
+        theme: settings
+            .theme
+            .clone()
+            .unwrap_or_else(|| DEFAULT_THEME.into()),
         custom_theme: settings.custom_theme.clone(),
         extended_sorting: settings.extended_sorting.unwrap_or(false),
     }
@@ -31,9 +34,7 @@ fn ui_settings(settings: &crate::settings::Settings) -> UiSettings {
 /// Normalize + validate a #rrggbb colour string.
 fn validate_hex(value: &str) -> AppResult<String> {
     let t = value.trim().to_ascii_lowercase();
-    let valid = t.len() == 7
-        && t.starts_with('#')
-        && t[1..].chars().all(|c| c.is_ascii_hexdigit());
+    let valid = t.len() == 7 && t.starts_with('#') && t[1..].chars().all(|c| c.is_ascii_hexdigit());
     if valid {
         Ok(t)
     } else {
@@ -56,7 +57,9 @@ fn persist(app: &tauri::AppHandle, state: &tauri::State<AppState>) -> AppResult<
 
 #[tauri::command]
 pub fn get_api_key(state: tauri::State<AppState>) -> ApiKeyStatus {
-    ApiKeyStatus { has_key: state.rawg.has_key() }
+    ApiKeyStatus {
+        has_key: state.rawg.has_key(),
+    }
 }
 
 #[tauri::command]
@@ -73,7 +76,11 @@ pub async fn set_api_key(
         None
     } else {
         state.rawg.set_api_key(Some(key.clone()));
-        match state.rawg.search("portal", 1, &crate::models::SearchFilters::default()).await {
+        match state
+            .rawg
+            .search("portal", 1, &crate::models::SearchFilters::default())
+            .await
+        {
             Ok(_) => Some(key),
             Err(e) => {
                 state.rawg.set_api_key(old);
@@ -91,7 +98,9 @@ pub async fn set_api_key(
         let path = app.path().app_config_dir()?.join("settings.json");
         settings.save(&path)?;
     }
-    Ok(ApiKeyStatus { has_key: state.rawg.has_key() })
+    Ok(ApiKeyStatus {
+        has_key: state.rawg.has_key(),
+    })
 }
 
 #[tauri::command]

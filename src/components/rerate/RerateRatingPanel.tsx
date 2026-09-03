@@ -33,13 +33,18 @@ export default function RerateRatingPanel({
 }) {
   const profile = useApp((s) => s.profile);
   const weights: CategoryWeights = profile?.categoryWeights ?? {
-    gameplay: 25, story: 25, music: 25, technical: 25,
+    gameplay: 25,
+    story: 25,
+    music: 25,
+    technical: 25,
   };
 
   const [starDraft, setStarDraft] = useState<number | null>(entry.starRating);
   const [catDraft, setCatDraft] = useState<Record<CatKey, number | null>>({
-    gameplay: entry.gameplay, story: entry.story,
-    music: entry.music, technical: entry.technical,
+    gameplay: entry.gameplay,
+    story: entry.story,
+    music: entry.music,
+    technical: entry.technical,
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +80,11 @@ export default function RerateRatingPanel({
     <div className="card max-w-2xl w-full p-4 sm:p-6 space-y-6">
       <div className="flex flex-wrap items-center gap-4">
         <div className="w-24 h-14 rounded-lg overflow-hidden shrink-0 bg-surface-800">
-          <CoverImage url={entry.coverUrl} alt={entry.name} className="w-full h-full object-cover" />
+          <CoverImage
+            url={entry.coverUrl}
+            alt={entry.name}
+            className="w-full h-full object-cover"
+          />
         </div>
         <div className="min-w-0 flex-1 basis-48">
           <h2 className="text-lg font-semibold text-white leading-tight truncate">{entry.name}</h2>
@@ -87,7 +96,9 @@ export default function RerateRatingPanel({
 
       <section className="bg-surface-800/50 rounded-xl p-4">
         <div className="flex items-baseline justify-between mb-3">
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Quick rating</h3>
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+            Quick rating
+          </h3>
           <span className="text-[11px] text-slate-500">
             was{" "}
             {entry.starRating != null ? (
@@ -105,7 +116,9 @@ export default function RerateRatingPanel({
 
       <section className="bg-surface-800/50 rounded-xl p-4">
         <div className="flex items-baseline justify-between mb-4">
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Detailed score</h3>
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+            Detailed score
+          </h3>
           <span className="text-[11px] text-slate-500">per-category, 0–100</span>
         </div>
         <div className="space-y-4">
@@ -115,13 +128,17 @@ export default function RerateRatingPanel({
                 <span className="text-slate-300 min-w-0 truncate">
                   {label}
                   <span className="text-slate-500">
-                    {" "}({weights[key].toFixed(0)}%){entry[key] != null && <> · was {entry[key]}</>}
+                    {" "}
+                    ({weights[key].toFixed(0)}%){entry[key] != null && <> · was {entry[key]}</>}
                   </span>
                 </span>
                 <span className="font-mono text-slate-400 shrink-0">{catDraft[key] ?? "—"}</span>
               </div>
               <input
-                type="range" min={0} max={100} step={1}
+                type="range"
+                min={0}
+                max={100}
+                step={1}
                 value={catDraft[key] ?? 50}
                 onChange={(e) => setCatDraft({ ...catDraft, [key]: Number(e.target.value) })}
                 className={`w-full select-none ${
@@ -133,13 +150,19 @@ export default function RerateRatingPanel({
         </div>
         <div className="mt-4 pt-4 border-t border-surface-700 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <div>
-            <div className="text-[11px] text-slate-500 uppercase tracking-wide">Overall (weighted)</div>
+            <div className="text-[11px] text-slate-500 uppercase tracking-wide">
+              Overall (weighted)
+            </div>
             <div className="flex items-baseline gap-2">
-              <span className={`text-3xl font-bold ${preview != null ? scoreColor(preview) : "text-slate-600"}`}>
+              <span
+                className={`text-3xl font-bold ${preview != null ? scoreColor(preview) : "text-slate-600"}`}
+              >
                 {preview != null ? preview.toFixed(1) : "—"}
               </span>
               {entry.computedOverall != null && (
-                <span className="text-xs text-slate-500">was {entry.computedOverall.toFixed(1)}</span>
+                <span className="text-xs text-slate-500">
+                  was {entry.computedOverall.toFixed(1)}
+                </span>
               )}
             </div>
           </div>

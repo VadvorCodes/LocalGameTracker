@@ -24,7 +24,8 @@ pub fn start_rerate_session(
     statuses: Vec<String>,
 ) -> AppResult<Vec<ReratePoolItem>> {
     let conn = state.db.lock().unwrap();
-    let profile = super::profile::read_profile(&conn)?.ok_or_else(|| AppError::msg("no profile"))?;
+    let profile =
+        super::profile::read_profile(&conn)?.ok_or_else(|| AppError::msg("no profile"))?;
     let statuses = validate_statuses(statuses)?;
 
     let pool = pick_cycle_pool(&conn, profile.id, &statuses)?;
@@ -116,11 +117,7 @@ fn select_eligible(
     query_entries(conn, &sql, profile_id, statuses)
 }
 
-fn count_in_scope(
-    conn: &Connection,
-    profile_id: i64,
-    statuses: &[String],
-) -> AppResult<i64> {
+fn count_in_scope(conn: &Connection, profile_id: i64, statuses: &[String]) -> AppResult<i64> {
     let placeholders = statuses.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
     let sql = format!(
         "SELECT COUNT(*) FROM library_entry WHERE profile_id = ?1 AND status IN ({placeholders})"
@@ -305,12 +302,12 @@ mod tests {
     fn jaccard_ranks_best_first_and_excludes_zero_overlap() {
         let target = entry(1, &["Action", "RPG", "Adventure"]);
         let library = vec![
-            entry(2, &["Action", "RPG"]),                  // 2/3 ≈ 0.67
-            entry(3, &["Action", "RPG", "Adventure"]),     // 3/3 = 1.0
-            entry(4, &["Puzzle"]),                         // 0 shared -> excluded
+            entry(2, &["Action", "RPG"]),              // 2/3 ≈ 0.67
+            entry(3, &["Action", "RPG", "Adventure"]), // 3/3 = 1.0
+            entry(4, &["Puzzle"]),                     // 0 shared -> excluded
             target.clone(),
-            entry(5, &["Strategy"]),                       // 0 shared -> excluded
-            entry(6, &["Action", "Strategy"]),             // 1/4 = 0.25
+            entry(5, &["Strategy"]),           // 0 shared -> excluded
+            entry(6, &["Action", "Strategy"]), // 1/4 = 0.25
         ];
         let top = closest_by_genre(&target, &library, 3);
         let ids: Vec<i64> = top.iter().map(|e| e.id).collect();
@@ -358,7 +355,11 @@ mod tests {
         let played = select_eligible(
             &conn,
             1,
-            &["Playing".to_string(), "Completed".to_string(), "Dropped".to_string()],
+            &[
+                "Playing".to_string(),
+                "Completed".to_string(),
+                "Dropped".to_string(),
+            ],
         )
         .unwrap();
         assert_eq!(sorted_ids(&played), vec![2, 3, 4]);
@@ -419,13 +420,19 @@ mod tests {
 
         tag_rerated(&conn, 1).unwrap();
         let rating_rows: i64 = conn
-            .query_row("SELECT COUNT(*) FROM rating WHERE library_entry_id = 1", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM rating WHERE library_entry_id = 1",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(rating_rows, 0);
         let tag: String = conn
-            .query_row("SELECT rerated_at FROM rerate_tag WHERE library_entry_id = 1", [], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT rerated_at FROM rerate_tag WHERE library_entry_id = 1",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert!(!tag.is_empty());
 

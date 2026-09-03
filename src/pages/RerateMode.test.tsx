@@ -76,9 +76,7 @@ beforeEach(() => {
 describe("RerateMode — idle screen", () => {
   it("defaults to the played scope and queries it by name", async () => {
     renderRerate();
-    expect(
-      await screen.findByText(/games? ready to re-rate/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/games? ready to re-rate/)).toBeInTheDocument();
     expect(apiMock.libraryQuery).toHaveBeenCalledWith({
       statuses: ["Playing", "Completed", "Dropped"],
       sort: "name",
@@ -125,10 +123,12 @@ describe("RerateMode — idle screen", () => {
   });
 
   describe("eligibility sentences and gating", () => {
-    async function expectSentence(rows: Partial<LibraryEntry>[], sentence: RegExp, extras: string[] = []) {
-      apiMock.libraryQuery.mockResolvedValueOnce(
-        rows.map((r) => makeEntry(r)),
-      );
+    async function expectSentence(
+      rows: Partial<LibraryEntry>[],
+      sentence: RegExp,
+      extras: string[] = [],
+    ) {
+      apiMock.libraryQuery.mockResolvedValueOnce(rows.map((r) => makeEntry(r)));
       renderRerate();
       expect(await screen.findByText(sentence)).toBeInTheDocument();
       for (const extra of extras) {
@@ -137,11 +137,9 @@ describe("RerateMode — idle screen", () => {
     }
 
     it("blocks starting with fewer than two games in scope", async () => {
-      await expectSentence(
-        [],
-        /0 games ready to re-rate\./,
-        ["You need at least 2 games in scope to start a cycle."],
-      );
+      await expectSentence([], /0 games ready to re-rate\./, [
+        "You need at least 2 games in scope to start a cycle.",
+      ]);
       expect(screen.getByRole("button", { name: "Start cycle" })).toBeDisabled();
     });
 
@@ -159,14 +157,19 @@ describe("RerateMode — idle screen", () => {
     });
 
     it("caps the sentence at cycles of 10", async () => {
-      await expectSentence(Array.from({ length: 24 }, () => ({})), /— cycles of 10\./);
+      await expectSentence(
+        Array.from({ length: 24 }, () => ({})),
+        /— cycles of 10\./,
+      );
     });
 
     it("warns when everything in scope is cooling down", async () => {
       await expectSentence(
         [{ reratedAt: "2026-08-01" }, { reratedAt: "2026-08-02" }],
         /0 games ready to re-rate · 2 cooling down from your last cycle — cycles of 1\./,
-        ["Everything in scope is cooling down — starting now resets the cooldown and puts all 2 games back in the pool."],
+        [
+          "Everything in scope is cooling down — starting now resets the cooldown and puts all 2 games back in the pool.",
+        ],
       );
     });
   });
@@ -187,9 +190,7 @@ describe("RerateMode — idle screen", () => {
     renderRerate();
     await screen.findByText(/ready to re-rate/);
     fireEvent.click(screen.getByRole("button", { name: "Start cycle" }));
-    expect(
-      await screen.findByText(/No games are in scope right now/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/No games are in scope right now/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start cycle" })).toBeInTheDocument();
   });
 
@@ -241,9 +242,7 @@ describe("RerateMode — swipe phase", () => {
   it("decides via the arrow keys", async () => {
     await enterSwipe();
     act(() => {
-      window.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
-      );
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
     });
     const card = swipeCard();
     transitionEnd(card);
@@ -326,9 +325,29 @@ describe("RerateMode — review phase", () => {
 
     // drag Beta over the upper half of Alpha
     alphaRow.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 200, bottom: 60, width: 200, height: 60, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+      ({
+        left: 0,
+        top: 0,
+        right: 200,
+        bottom: 60,
+        width: 200,
+        height: 60,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
     betaRow.getBoundingClientRect = () =>
-      ({ left: 0, top: 70, right: 200, bottom: 130, width: 200, height: 60, x: 0, y: 70, toJSON: () => ({}) }) as DOMRect;
+      ({
+        left: 0,
+        top: 70,
+        right: 200,
+        bottom: 130,
+        width: 200,
+        height: 60,
+        x: 0,
+        y: 70,
+        toJSON: () => ({}),
+      }) as DOMRect;
 
     const startEvt = new Event("dragstart", { bubbles: true, cancelable: true });
     Object.defineProperty(startEvt, "dataTransfer", { value: dataTransfer });
@@ -374,7 +393,17 @@ describe("RerateMode — review phase", () => {
       dropEffect: "",
     };
     gammaRow.getBoundingClientRect = () =>
-      ({ left: 0, top: 0, right: 200, bottom: 60, width: 200, height: 60, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+      ({
+        left: 0,
+        top: 0,
+        right: 200,
+        bottom: 60,
+        width: 200,
+        height: 60,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
 
     const startEvt = new Event("dragstart", { bubbles: true, cancelable: true });
     Object.defineProperty(startEvt, "dataTransfer", { value: dataTransfer });
@@ -383,7 +412,17 @@ describe("RerateMode — review phase", () => {
     // drop far below the (empty of rows) re-rate section → appended
     rerateSection.querySelectorAll("[data-pile-row]").forEach((r) => {
       r.getBoundingClientRect = () =>
-        ({ left: 0, top: 0, right: 200, bottom: 60, width: 200, height: 60, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+        ({
+          left: 0,
+          top: 0,
+          right: 200,
+          bottom: 60,
+          width: 200,
+          height: 60,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        }) as DOMRect;
     });
     const dropEvt = new Event("drop", { bubbles: true, cancelable: true });
     Object.defineProperty(dropEvt, "dataTransfer", { value: dataTransfer });

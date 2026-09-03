@@ -120,8 +120,8 @@ describe("buildCustomVars", () => {
   it("steps surfaces UP from a dark base", () => {
     const vars = buildCustomVars({ base: "#0b0e14", accent: "#5b7cfa" });
     const l950 = lightness(vars["--surface-950"]);
-    const tiers = ["--surface-900", "--surface-800", "--surface-700", "--surface-600"].map(
-      (k) => lightness(vars[k]),
+    const tiers = ["--surface-900", "--surface-800", "--surface-700", "--surface-600"].map((k) =>
+      lightness(vars[k]),
     );
     tiers.forEach((l) => expect(l).toBeGreaterThan(l950));
     expect(tiers[0]).toBeLessThan(tiers[1]);
@@ -132,8 +132,8 @@ describe("buildCustomVars", () => {
   it("steps surfaces DOWN from a light base so text stays readable", () => {
     const vars = buildCustomVars({ base: "#cccccc", accent: "#5b7cfa" });
     const l950 = lightness(vars["--surface-950"]); // 0.8
-    const tiers = ["--surface-900", "--surface-800", "--surface-700", "--surface-600"].map(
-      (k) => lightness(vars[k]),
+    const tiers = ["--surface-900", "--surface-800", "--surface-700", "--surface-600"].map((k) =>
+      lightness(vars[k]),
     );
     tiers.forEach((l) => expect(l).toBeLessThan(l950));
     expect(new Set(tiers).size).toBe(4); // tiers stay distinct
@@ -142,9 +142,13 @@ describe("buildCustomVars", () => {
   it("keeps every tier distinct even for a base at the readability ceiling", () => {
     // lightness 0.35 → the up-step span would collapse; tiers must still differ
     const vars = buildCustomVars({ base: "#595959", accent: "#5b7cfa" });
-    const all = ["--surface-950", "--surface-900", "--surface-800", "--surface-700", "--surface-600"].map(
-      (k) => lightness(vars[k]),
-    );
+    const all = [
+      "--surface-950",
+      "--surface-900",
+      "--surface-800",
+      "--surface-700",
+      "--surface-600",
+    ].map((k) => lightness(vars[k]));
     expect(new Set(all).size).toBe(5);
   });
 

@@ -55,28 +55,53 @@ mod tests {
 
     #[test]
     fn equal_weights_full() {
-        assert_eq!(compute_overall(Some(80), Some(60), Some(40), Some(100), &w()), Some(70.0));
+        assert_eq!(
+            compute_overall(Some(80), Some(60), Some(40), Some(100), &w()),
+            Some(70.0)
+        );
     }
 
     #[test]
     fn partial_renormalizes() {
         // Only gameplay=80 filled: weight renormalizes to 100% -> 80.
-        assert_eq!(compute_overall(Some(80), None, None, None, &w()), Some(80.0));
+        assert_eq!(
+            compute_overall(Some(80), None, None, None, &w()),
+            Some(80.0)
+        );
         // gameplay=80, music=40 with equal weights -> mean 60.
-        assert_eq!(compute_overall(Some(80), None, Some(40), None, &w()), Some(60.0));
+        assert_eq!(
+            compute_overall(Some(80), None, Some(40), None, &w()),
+            Some(60.0)
+        );
     }
 
     #[test]
     fn custom_weights() {
-        let w = CategoryWeights { gameplay: 40.0, story: 25.0, music: 15.0, technical: 20.0 };
+        let w = CategoryWeights {
+            gameplay: 40.0,
+            story: 25.0,
+            music: 15.0,
+            technical: 20.0,
+        };
         // 100*0.4 + 0*0.25 + 100*0.15 + 0*0.2 = 55
-        assert_eq!(compute_overall(Some(100), Some(0), Some(100), Some(0), &w), Some(55.0));
+        assert_eq!(
+            compute_overall(Some(100), Some(0), Some(100), Some(0), &w),
+            Some(55.0)
+        );
     }
 
     #[test]
     fn clamps_not_needed_but_rounds() {
-        let w = CategoryWeights { gameplay: 1.0, story: 1.0, music: 1.0, technical: 0.0 };
+        let w = CategoryWeights {
+            gameplay: 1.0,
+            story: 1.0,
+            music: 1.0,
+            technical: 0.0,
+        };
         // 33+33+34=100 -> 100*1/3 each -> 33.3+33.3+33.4? compute: (33+33+34)/3 = 33.333 -> 33.3
-        assert_eq!(compute_overall(Some(33), Some(33), Some(34), None, &w), Some(33.3));
+        assert_eq!(
+            compute_overall(Some(33), Some(33), Some(34), None, &w),
+            Some(33.3)
+        );
     }
 }

@@ -5,8 +5,7 @@ import { StarPicker, Stars } from "./StarRating";
 /** The clipped overlay width per star ("100%", "50%", "0%"). */
 function starFills(container: HTMLElement, starClass: string): string[] {
   return Array.from(container.querySelectorAll(`.${starClass}`)).map(
-    (star) =>
-      (star.querySelector("span.overflow-hidden") as HTMLElement | null)?.style.width ?? "",
+    (star) => (star.querySelector("span.overflow-hidden") as HTMLElement | null)?.style.width ?? "",
   );
 }
 
@@ -26,13 +25,7 @@ describe("Stars (read-only)", () => {
 
   it("fills all five for a 5", () => {
     const { container } = render(<Stars value={5} />);
-    expect(starFills(container, READONLY_STAR)).toEqual([
-      "100%",
-      "100%",
-      "100%",
-      "100%",
-      "100%",
-    ]);
+    expect(starFills(container, READONLY_STAR)).toEqual(["100%", "100%", "100%", "100%", "100%"]);
   });
 });
 
@@ -80,13 +73,7 @@ describe("StarPicker", () => {
     expect(starFills(container, "w-8.h-8")).toEqual(["100%", "100%", "100%", "0%", "0%"]);
 
     fireEvent.mouseEnter(screen.getByLabelText("4.5 stars"));
-    expect(starFills(container, "w-8.h-8")).toEqual([
-      "100%",
-      "100%",
-      "100%",
-      "100%",
-      "50%",
-    ]);
+    expect(starFills(container, "w-8.h-8")).toEqual(["100%", "100%", "100%", "100%", "50%"]);
 
     fireEvent.mouseLeave(container.querySelector("div.select-none")!);
     expect(starFills(container, "w-8.h-8")).toEqual(["100%", "100%", "100%", "0%", "0%"]);

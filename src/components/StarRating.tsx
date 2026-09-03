@@ -67,7 +67,10 @@ export function StarPicker({
                 </span>
                 {/* Clip container is exactly the glyph size, so a 50% width
                     clips the glyph at exactly its midpoint. */}
-                <span className="absolute inset-0 overflow-hidden" style={{ width: `${fill * 100}%` }}>
+                <span
+                  className="absolute inset-0 overflow-hidden"
+                  style={{ width: `${fill * 100}%` }}
+                >
                   <StarIcon filled className="w-5 h-5" />
                 </span>
               </span>
