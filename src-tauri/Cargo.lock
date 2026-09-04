@@ -962,7 +962,7 @@ dependencies = [
 
 [[package]]
 name = "gametracker"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "reqwest 0.12.28",
  "rusqlite",

@@ -1,6 +1,6 @@
 [package]
 name = "gametracker"
-version = "1.0.0"
+version = "1.0.1"
 description = "Offline-first personal game library, rating system and gaming analytics"
 edition = "2021"
 

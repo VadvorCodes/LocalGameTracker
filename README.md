@@ -4,15 +4,32 @@
 ![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![SQLite](https://img.shields.io/badge/SQLite-WAL-003B57?logo=sqlite&logoColor=white)
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.0.1-blue)
 ![Tests](https://img.shields.io/badge/tests-366%20frontend%20%2F%2029%20Rust-brightgreen)
 
 **A privacy-first, offline-first desktop app for tracking, rating and understanding your game library.** Inspired by [Backloggd](https://backloggd.com), rebuilt as a native desktop application — no accounts, no cloud, no telemetry. Everything lives on your machine.
 
 Built with **Tauri 2** (Rust backend) + **React 18** (TypeScript frontend) + **SQLite**.
 
+## Install
+
+**Just want to use it?** Windows 10/11 (64-bit), no developer tools needed:
+
+1. Download `GameTracker_1.0.1_x64-setup.exe` from the [latest release](https://github.com/VadvorCodes/LocalGameTracker/releases/latest).
+2. Double-click it and follow the prompts. If SmartScreen appears, choose **More info → Run anyway** (the app isn't code-signed).
+3. Launch GameTracker and pick a local username.
+4. To add games, grab a free API key at [rawg.io/apidocs](https://rawg.io/apidocs) and paste it in **Settings → General**. That's the only setup — rating, re-rate sessions and the dashboard all work fully offline.
+
+To remove it again later: run `uninstall.bat` (attached to the release) to delete the program *and* all your data, or use **Windows Settings → Apps → Installed apps**.
+
+**Build from source** — prerequisites: Node.js 18+, the Rust toolchain (MSVC on Windows), and a free [RAWG API key](https://rawg.io/apidocs) for live search (the app works without one from the local cache):
+
 ```bash
 git clone https://github.com/VadvorCodes/LocalGameTracker.git
+cd LocalGameTracker
+npm install
+npm run tauri dev     # development
+npm run tauri build   # NSIS + MSI installers land in src-tauri/target/release/bundle/
 ```
 
 ## Features
@@ -90,26 +107,13 @@ Everything the app creates is inside two folders (Windows), both keyed by the bu
 
 ## Uninstalling
 
-Run **`uninstall.bat`** (double-click). It will:
+Run **`uninstall.bat`** (double-click — it lives in the repo root and is attached to every release). It will:
 
 1. Offer to close a running GameTracker instance,
 2. find the installed program's own uninstaller in the registry and offer to run it (removes program files, Start Menu shortcut and the Windows uninstall entry), then
 3. delete both data folders above — database, settings (including the API key), cover cache and WebView2 data.
 
 The script is safe to run even if GameTracker was never installed or is already gone: it simply wipes whatever data remains. You can also remove the program alone via **Windows Settings → Apps → Installed apps**.
-
-## Getting started
-
-**Prerequisites**: Node.js 18+, the Rust toolchain (MSVC on Windows), and a free [RAWG API key](https://rawg.io/apidocs) for live search (the app works without one from the local cache).
-
-```bash
-npm install
-npm run tauri dev     # development
-npm run tauri build   # production build; NSIS + MSI installers land in
-                      # src-tauri/target/release/bundle/
-```
-
-On first launch, pick a local username, then paste your RAWG key in **Settings → General** — it's validated against the live API before being stored, and never leaves your machine afterwards.
 
 ## Testing
 
