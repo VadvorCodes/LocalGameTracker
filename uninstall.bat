@@ -5,18 +5,24 @@ title GameTracker - Uninstall
 rem ================================================================
 rem  GameTracker - full uninstall
 rem
-rem  1. Closes a running GameTracker instance (with your consent)
-rem  2. Runs the installed program's own uninstaller, if registered
-rem  3. Deletes ALL local app data:
-rem       %APPDATA%\com.gametracker.desktop
-rem         (database with library/ratings/notes, settings.json with
-rem          your RAWG API key, downloaded cover-art cache)
-rem       %LOCALAPPDATA%\com.gametracker.desktop
-rem         (embedded browser data: web cache, localStorage)
+rem  What this script can touch - and nothing else:
+rem    1. Closes GameTracker.exe, but only if you answer Y
+rem    2. READS (never writes/deletes) three fixed registry keys to
+rem       find the uninstaller registered by GameTracker's installer;
+rem       launches it only if it looks like a real uninstaller AND
+rem       you answer Y
+rem    3. Deletes exactly two folders and nothing else:
+rem         %APPDATA%\com.gametracker.desktop
+rem         %LOCALAPPDATA%\com.gametracker.desktop
 rem
+rem  No other files, no registry writes, no network access.
 rem  Safe to run even if GameTracker was never installed or is
 rem  already removed - it simply wipes whatever data remains.
 rem ================================================================
+
+rem ---- safety guard: refuse to run without the expected paths ----
+if not defined APPDATA goto :env_error
+if not defined LOCALAPPDATA goto :env_error
 
 echo.
 echo  ==================================================
@@ -32,8 +38,9 @@ echo       - the downloaded cover-art cache
 echo    3. %LOCALAPPDATA%\com.gametracker.desktop
 echo       - the embedded browser's cache and localStorage
 echo.
-echo  Deleted data CANNOT be recovered. Back up the two folders
-echo  above first if you want to keep your library.
+echo  Nothing outside these two folders is deleted. Deleted data
+echo  CANNOT be recovered - back the folders up first if you want
+echo  to keep your library.
 echo.
 
 choice /C YN /N /M "Proceed with the full uninstall? [Y/N] "
@@ -72,6 +79,14 @@ if not defined UNINST (
     echo.
     echo  [1/2] Found the installed program:
     echo        %UNINST%
+    call :looks_like_uninstaller
+    if errorlevel 1 (
+        echo        This does not look like a standard uninstaller,
+        echo        so it will NOT be started. If GameTracker is still
+        echo        installed, remove it via Windows Settings ^> Apps
+        echo        ^> Installed apps.
+        goto :data
+    )
     choice /C YN /N /M "Run its uninstaller now? [Y/N] "
     if errorlevel 2 goto :data
     set "UNINST=%UNINST:/I{=/X{%"
@@ -94,6 +109,13 @@ goto :done
 :cancelled
 echo.
 echo  Cancelled. Nothing was changed.
+goto :done
+
+:env_error
+echo.
+echo  ERROR: APPDATA / LOCALAPPDATA are not set in this environment.
+echo  Refusing to guess where GameTracker's data lives - nothing was
+echo  deleted.
 
 :done
 echo.
@@ -106,6 +128,21 @@ rem ---- helper: read an NSIS UninstallString, if present ------------
 :find_uninst
 for /f "skip=2 tokens=2*" %%A in ('reg query "%~1" /v UninstallString 2^>nul') do if not defined UNINST set "UNINST=%%~B"
 goto :eof
+
+rem ---- helper: sanity-check UNINST (0 = safe to offer, 1 = refuse) -
+rem  Accepts only strings that mention uninstall.exe or msiexec.exe
+rem  once surrounding quotes are stripped. Anything else (scripts,
+rem  unknown binaries, odd registry values) is never executed.
+
+:looks_like_uninstaller
+set "CHECK=%UNINST:"=%"
+if not defined CHECK exit /b 1
+set "STRIPPED=%CHECK%"
+set "CHECK=%CHECK:uninstall.exe=%"
+if not "%CHECK%"=="%STRIPPED%" exit /b 0
+set "CHECK=%STRIPPED:msiexec.exe=%"
+if not "%CHECK%"=="%STRIPPED%" exit /b 0
+exit /b 1
 
 rem ---- helper: delete a folder tree and report the result ----------
 
