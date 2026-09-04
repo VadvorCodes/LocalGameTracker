@@ -1,4 +1,5 @@
-import type { LibraryEntry } from "../../types";
+import { CYCLE_SIZES } from "../../types";
+import type { LibraryEntry, RerateCycleSize } from "../../types";
 import type { Scope } from "../../pages/RerateMode";
 
 const SCOPE_LABELS: Record<Scope, string> = {
@@ -16,12 +17,16 @@ export default function IdleScreen({
   scopeRows,
   error,
   onChangeScope,
+  cycleSize,
+  onChangeCycleSize,
   onStartCycle,
 }: {
   scope: Scope;
   scopeRows: LibraryEntry[] | null;
   error: string | null;
   onChangeScope: (scope: Scope) => void;
+  cycleSize: RerateCycleSize;
+  onChangeCycleSize: (size: RerateCycleSize) => void;
   onStartCycle: () => void;
 }) {
   const inScope = scopeRows?.length ?? 0;
@@ -30,12 +35,14 @@ export default function IdleScreen({
   // The backend builds the pool from eligible games; a fully-cooled scope
   // revives from the whole scope instead, so mirror that in the preview.
   const poolBasis = eligible >= 2 ? eligible : inScope;
-  const cycleSize = Math.min(10, Math.max(1, Math.floor(poolBasis / 2)));
+  // The pool is the chosen size capped by what's actually available.
+  const cap = cycleSize === "full" ? poolBasis : cycleSize;
+  const shownSize = Math.max(1, Math.min(cap, Math.max(poolBasis, 1)));
   return (
     <div className="p-8 max-w-2xl mx-auto h-full flex flex-col">
       <h1 className="text-xl font-semibold text-white">Re-Rate Mode</h1>
       <p className="text-sm text-slate-500 mt-2 leading-relaxed">
-        Revisit old ratings with fresh eyes. A cycle shows you {cycleSize} of your games one at a
+        Revisit old ratings with fresh eyes. A cycle shows you {shownSize} of your games one at a
         time — swipe left on the ones whose rating no longer feels right, right on the ones you
         stand by. Afterwards you re-rate the left pile individually. Games you re-rate sit out the
         next cycle.
@@ -65,14 +72,28 @@ export default function IdleScreen({
             ? `${eligible} game${eligible === 1 ? "" : "s"} ready to re-rate${
                 cooling > 0 ? ` · ${cooling} cooling down from your last cycle` : ""
               }${
-                poolBasis >= 10
-                  ? " — cycles of 10"
-                  : poolBasis >= 2
-                    ? ` — cycles of ${cycleSize}`
-                    : ""
+                poolBasis >= 2
+                  ? cycleSize === "full"
+                    ? ` — one cycle of all ${poolBasis}`
+                    : ` — cycles of ${cycleSize}`
+                  : ""
               }.`
             : "Counting eligible games…"}
         </p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-slate-500">Cycle size:</span>
+          {CYCLE_SIZES.map((s) => (
+            <button
+              key={String(s)}
+              aria-pressed={cycleSize === s}
+              title={s === "full" ? "Every eligible game joins one cycle" : `${s} games per cycle`}
+              className={`chip ${cycleSize === s ? "chip-active" : "chip-idle hover:text-slate-300"}`}
+              onClick={() => onChangeCycleSize(s)}
+            >
+              {s === "full" ? "Full library" : s}
+            </button>
+          ))}
+        </div>
         <button
           className="btn bg-surface-800 hover:bg-accent-600 text-slate-300 hover:text-white"
           disabled={inScope < 2}

@@ -8,6 +8,7 @@ import type {
   LibraryQuery,
   PlayStatus,
   Profile,
+  RerateCycleSize,
   ReratePoolItem,
   RatingMode,
   SearchFilters,
@@ -49,8 +50,8 @@ export const api = {
 
   setStarRating: (entryId: number, stars: number | null) =>
     invoke<LibraryEntry>("set_star_rating", { entryId, stars }),
-  startRerateSession: (statuses: PlayStatus[]) =>
-    invoke<ReratePoolItem[]>("start_rerate_session", { statuses }),
+  startRerateSession: (statuses: PlayStatus[], cycleSize: RerateCycleSize) =>
+    invoke<ReratePoolItem[]>("start_rerate_session", { statuses, cycleSize: String(cycleSize) }),
   markRerated: (entryId: number) => invoke<void>("mark_rerated", { entryId }),
   setCategoryScores: (entryId: number, scores: CategoryScores) =>
     invoke<LibraryEntry>("set_category_scores", { entryId, scores }),

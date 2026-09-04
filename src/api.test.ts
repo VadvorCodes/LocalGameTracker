@@ -108,9 +108,15 @@ describe("api wrappers", () => {
 
   it("rerate session commands", async () => {
     invokeMock.mockResolvedValue([]);
-    await api.startRerateSession(["Completed", "Dropped"]);
+    await api.startRerateSession(["Completed", "Dropped"], 10);
     expect(invokeMock).toHaveBeenCalledWith("start_rerate_session", {
       statuses: ["Completed", "Dropped"],
+      cycleSize: "10",
+    });
+    await api.startRerateSession(["Completed", "Dropped"], "full");
+    expect(invokeMock).toHaveBeenLastCalledWith("start_rerate_session", {
+      statuses: ["Completed", "Dropped"],
+      cycleSize: "full",
     });
     await api.markRerated(12);
     expect(invokeMock).toHaveBeenCalledWith("mark_rerated", { entryId: 12 });

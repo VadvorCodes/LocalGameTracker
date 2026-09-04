@@ -218,10 +218,7 @@ export interface Analytics {
     music: number | null;
     technical: number | null;
   }[];
-  firstVsRecent: {
-    firstQuartile: CategoryAvgs;
-    recentQuartile: CategoryAvgs;
-  } | null;
+  latestFive: CategoryAvgs | null;
   gutFeelingGames: MiniEntry[];
   onReflectionGames: MiniEntry[];
 }
@@ -257,3 +254,8 @@ export interface ReratePoolItem {
 
 /** What the user decided during the swipe phase of a re-rate cycle. */
 export type RerateDecision = "rerate" | "keep";
+
+/** How many games one re-rate cycle shows; "full" takes every eligible game. */
+export type RerateCycleSize = 5 | 10 | 20 | "full";
+
+export const CYCLE_SIZES: RerateCycleSize[] = [5, 10, 20, "full"];

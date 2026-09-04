@@ -36,7 +36,7 @@ pub struct Analytics {
     // trends
     pub rating_trend: Vec<Trendpoint>, // by month of rated_at
     pub category_trend: Vec<CategoryTrendpoint>, // avg per category by month
-    pub first_vs_recent: Option<CategoryShift>, // how tastes shifted
+    pub latest_five: Option<CategoryAverages>, // avg of the 5 most recently rated games
 
     // star vs detailed divergence
     pub gut_feeling_games: Vec<MiniEntry>, // stars notably higher than detailed score
@@ -103,13 +103,6 @@ pub struct CategoryTrendpoint {
     pub story: Option<f64>,
     pub music: Option<f64>,
     pub technical: Option<f64>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CategoryShift {
-    pub first_quartile: CategoryAverages,
-    pub recent_quartile: CategoryAverages,
 }
 
 /// Stars-vs-score gap (on the 0-100 scale) that qualifies a game for the
@@ -179,7 +172,7 @@ pub fn get_analytics(state: tauri::State<AppState>, mode: Option<String>) -> App
 
     a.rating_trend = rating_trend(&conn, pid)?;
     a.category_trend = category_trend(&conn, pid)?;
-    a.first_vs_recent = first_vs_recent(&conn, pid)?;
+    a.latest_five = latest_five(&conn, pid)?;
 
     a.gut_feeling_games = divergent(&conn, pid, true)?;
     a.on_reflection_games = divergent(&conn, pid, false)?;
@@ -337,46 +330,34 @@ fn category_trend(conn: &rusqlite::Connection, pid: i64) -> AppResult<Vec<Catego
     Ok(it.flatten().collect())
 }
 
-/// First vs most recent quartile of the rating history.
-fn first_vs_recent(conn: &rusqlite::Connection, pid: i64) -> AppResult<Option<CategoryShift>> {
-    let mut stmt = conn.prepare(&format!(
-        "WITH ranked AS (
-             SELECT r.*, ROW_NUMBER() OVER (ORDER BY r.rated_at, r.library_entry_id) AS rn,
-                    COUNT(*) OVER () AS total
-             {JOIN} WHERE e.profile_id = ?1 AND r.rated_at IS NOT NULL
-         )
-         SELECT CASE WHEN rn <= total / 4.0 THEN 'first' ELSE 'recent' END half,
-                AVG(gameplay), AVG(story), AVG(music), AVG(technical)
-         FROM ranked
-         WHERE rn <= total / 4.0 OR rn > total * 0.75
-         GROUP BY half"
-    ))?;
-    let it = stmt.query_map(params![pid], |r| {
-        Ok((
-            r.get::<_, String>(0)?,
-            CategoryAverages {
-                gameplay: r.get(1)?,
-                story: r.get(2)?,
-                music: r.get(3)?,
-                technical: r.get(4)?,
-            },
-        ))
-    })?;
-    let mut first = None;
-    let mut recent = None;
-    for (half, avgs) in it.flatten() {
-        match half.as_str() {
-            "first" => first = Some(avgs),
-            _ => recent = Some(avgs),
-        }
-    }
-    Ok(match (first, recent) {
-        (Some(f), Some(rc)) => Some(CategoryShift {
-            first_quartile: f,
-            recent_quartile: rc,
-        }),
-        _ => None,
-    })
+/// Average category scores of the 5 most recently rated games — the "now"
+/// the dashboard contrasts with the whole-profile `category_averages`.
+fn latest_five(conn: &rusqlite::Connection, pid: i64) -> AppResult<Option<CategoryAverages>> {
+    // The outer aggregate (no GROUP BY) always yields exactly one row; COUNT
+    // distinguishes "no rated games" from "rated games, all categories null".
+    let (count, avgs) = conn.query_row(
+        &format!(
+            "SELECT COUNT(*), AVG(gameplay), AVG(story), AVG(music), AVG(technical) FROM (
+                 SELECT r.gameplay, r.story, r.music, r.technical
+                 {JOIN} WHERE e.profile_id = ?1 AND r.rated_at IS NOT NULL
+                 ORDER BY r.rated_at DESC, r.library_entry_id DESC
+                 LIMIT 5
+             )"
+        ),
+        params![pid],
+        |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                CategoryAverages {
+                    gameplay: r.get(1)?,
+                    story: r.get(2)?,
+                    music: r.get(3)?,
+                    technical: r.get(4)?,
+                },
+            ))
+        },
+    )?;
+    Ok((count > 0).then_some(avgs))
 }
 
 /// Games whose stars (0-5 -> 0-100) and detailed score disagree by at least

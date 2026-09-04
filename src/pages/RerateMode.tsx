@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { api } from "../api";
-import type { LibraryEntry, PlayStatus, RerateDecision, ReratePoolItem } from "../types";
+import { CYCLE_SIZES } from "../types";
+import type {
+  LibraryEntry,
+  PlayStatus,
+  RerateCycleSize,
+  RerateDecision,
+  ReratePoolItem,
+} from "../types";
 import type { DropTarget } from "../lib/dropTarget";
 import { useSequentialFetch } from "../hooks/useSequentialFetch";
 import IdleScreen from "../components/rerate/IdleScreen";
@@ -14,6 +21,7 @@ type Phase = "idle" | "loading" | "swipe" | "review" | "rerate" | "done";
 export type Scope = "played" | "finished";
 
 const SCOPE_KEY = "rerate_scope";
+const CYCLE_SIZE_KEY = "rerate_cycle_size";
 
 const SCOPE_STATUSES: Record<Scope, PlayStatus[]> = {
   played: ["Playing", "Completed", "Dropped"],
@@ -247,6 +255,11 @@ export default function RerateMode() {
     // flow undefined statuses into the backend queries
     () => (localStorage.getItem(SCOPE_KEY) === "finished" ? "finished" : "played"),
   );
+  const [cycleSize, setCycleSize] = useState<RerateCycleSize>(() => {
+    // same validation rule: anything but 5/10/20/full falls back to the default
+    const raw = localStorage.getItem(CYCLE_SIZE_KEY);
+    return CYCLE_SIZES.find((s) => String(s) === raw) ?? 10;
+  });
   const [scopeRows, setScopeRows] = useState<LibraryEntry[] | null>(null);
   const { begin, isCurrent } = useSequentialFetch();
 
@@ -267,10 +280,15 @@ export default function RerateMode() {
     localStorage.setItem(SCOPE_KEY, s);
   }
 
+  function changeCycleSize(size: RerateCycleSize) {
+    setCycleSize(size);
+    localStorage.setItem(CYCLE_SIZE_KEY, String(size));
+  }
+
   async function startCycle() {
     dispatch({ type: "startSession" });
     try {
-      const items = await api.startRerateSession(SCOPE_STATUSES[scope]);
+      const items = await api.startRerateSession(SCOPE_STATUSES[scope], cycleSize);
       dispatch({ type: "poolLoaded", pool: items });
     } catch (e) {
       dispatch({ type: "sessionFailed", message: String(e) });
@@ -329,6 +347,8 @@ export default function RerateMode() {
       scopeRows={scopeRows}
       error={cycle.error}
       onChangeScope={changeScope}
+      cycleSize={cycleSize}
+      onChangeCycleSize={changeCycleSize}
       onStartCycle={startCycle}
     />
   );

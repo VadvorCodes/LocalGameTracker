@@ -235,23 +235,23 @@ describe("Dashboard — conditional sections", () => {
     expect(chart(container, "Line")).not.toBeNull();
   });
 
-  it("shows Then vs Now deltas, colour-coded, with em dashes for nulls", async () => {
+  it("shows latest-5 vs profile deltas, colour-coded, with em dashes for nulls", async () => {
     apiMock.getAnalytics.mockResolvedValueOnce(
       makeAnalytics({
         avgOverall: 60,
-        firstVsRecent: {
-          firstQuartile: { gameplay: 50, story: 60, music: 40, technical: null },
-          recentQuartile: { gameplay: 58, story: 56.5, music: 40.5, technical: 70 },
-        },
+        latestFive: { gameplay: 58, story: 56.5, music: 40.5, technical: null },
+        categoryAverages: { gameplay: 50, story: 60, music: 40, technical: 70 },
       }),
     );
     renderDashboard();
     await screen.findByText("My gaming dashboard");
-    expect(screen.getByText("+8.0 since you started")).toHaveClass("text-emerald-400");
-    expect(screen.getByText("-3.5 since you started")).toHaveClass("text-rose-400");
-    expect(screen.getByText("+0.5 since you started")).toHaveClass("text-slate-500");
-    // technical: recent 70, first null → delta shows an em dash
-    expect(screen.getByText("70.0")).toBeInTheDocument();
+    expect(screen.getByText("Latest 5 games played")).toBeInTheDocument();
+    expect(screen.getByText("+8.0 vs profile")).toHaveClass("text-emerald-400");
+    expect(screen.getByText("-3.5 vs profile")).toHaveClass("text-rose-400");
+    expect(screen.getByText("+0.5 vs profile")).toHaveClass("text-slate-500");
+    // technical is absent from the latest 5: number and delta both show an em dash
+    const tiles = screen.getByText("Technical").parentElement!;
+    expect(tiles).toHaveTextContent("—");
   });
 });
 

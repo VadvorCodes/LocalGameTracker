@@ -86,7 +86,7 @@ export default function Dashboard() {
   }
 
   const hasRatings = analytics.avgOverall != null || analytics.avgStars != null;
-  const shift = analytics.firstVsRecent;
+  const latest = analytics.latestFive;
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-8">
@@ -257,8 +257,11 @@ export default function Dashboard() {
         </div>
       )}
 
-      {shift && (
-        <Panel title="Then vs Now">
+      {latest && CATEGORIES.some(({ key }) => latest[key] != null) && (
+        <Panel title="Latest 5 games played">
+          <p className="text-xs text-slate-500 mb-3">
+            Average of your five most recent ratings compared to your all-time profile average.
+          </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {(
               [
@@ -268,9 +271,9 @@ export default function Dashboard() {
                 ["Technical", "technical"],
               ] as const
             ).map(([label, key]) => {
-              const first = shift.firstQuartile[key];
-              const recent = shift.recentQuartile[key];
-              const delta = first != null && recent != null ? recent - first : null;
+              const recent = latest[key];
+              const profileAvg = analytics.categoryAverages[key];
+              const delta = recent != null && profileAvg != null ? recent - profileAvg : null;
               return (
                 <div key={key} className="bg-surface-800/50 rounded-xl p-4 text-center">
                   <div className="text-xs text-slate-400 mb-1">{label}</div>
@@ -288,9 +291,7 @@ export default function Dashboard() {
                             : "text-slate-500"
                     }`}
                   >
-                    {delta == null
-                      ? "—"
-                      : `${delta > 0 ? "+" : ""}${delta.toFixed(1)} since you started`}
+                    {delta == null ? "—" : `${delta > 0 ? "+" : ""}${delta.toFixed(1)} vs profile`}
                   </div>
                 </div>
               );

@@ -58,6 +58,7 @@ beforeEach(() => {
   apiMock.startRerateSession.mockReset();
   apiMock.markRerated.mockReset().mockResolvedValue(undefined);
   apiMock.setStarRating.mockReset();
+  window.localStorage.clear();
   useApp.setState({
     profile: null,
     profileLoading: false,
@@ -143,22 +144,58 @@ describe("RerateMode — idle screen", () => {
     it("reports cooling games and the cycle size", async () => {
       await expectSentence(
         [{}, {}, {}, {}, { reratedAt: "2026-08-01" }],
-        /4 games ready to re-rate · 1 cooling down from your last cycle — cycles of 2\./,
+        /4 games ready to re-rate · 1 cooling down from your last cycle — cycles of 10\./,
       );
       expect(screen.getByRole("button", { name: "Start cycle" })).toBeEnabled();
     });
 
-    it("caps the sentence at cycles of 10", async () => {
+    it("defaults to cycles of 10", async () => {
       await expectSentence(
         Array.from({ length: 24 }, () => ({})),
         /— cycles of 10\./,
       );
     });
 
+    it("switches the cycle size, persists it and reflects it in the sentence", async () => {
+      apiMock.libraryQuery.mockResolvedValue(Array.from({ length: 24 }, () => makeEntry({})));
+      renderRerate();
+      expect(await screen.findByText(/— cycles of 10\./)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "20" }));
+      expect(await screen.findByText(/— cycles of 20\./)).toBeInTheDocument();
+      expect(window.localStorage.getItem("rerate_cycle_size")).toBe("20");
+
+      fireEvent.click(screen.getByRole("button", { name: "Full library" }));
+      expect(await screen.findByText(/— one cycle of all 24\./)).toBeInTheDocument();
+      expect(window.localStorage.getItem("rerate_cycle_size")).toBe("full");
+    });
+
+    it("honours a persisted cycle size and passes it to the session", async () => {
+      window.localStorage.setItem("rerate_cycle_size", "5");
+      apiMock.libraryQuery.mockResolvedValueOnce(Array.from({ length: 24 }, () => makeEntry({})));
+      apiMock.startRerateSession.mockResolvedValueOnce([]);
+      renderRerate();
+      expect(await screen.findByText(/— cycles of 5\./)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Start cycle" }));
+      await screen.findByText(/No games are in scope right now/);
+      expect(apiMock.startRerateSession).toHaveBeenCalledWith(
+        ["Playing", "Completed", "Dropped"],
+        // the api layer stringifies the size for the Tauri command
+        5,
+      );
+    });
+
+    it("falls back to cycles of 10 when the persisted size is garbage", async () => {
+      window.localStorage.setItem("rerate_cycle_size", "99");
+      apiMock.libraryQuery.mockResolvedValueOnce(Array.from({ length: 24 }, () => makeEntry({})));
+      renderRerate();
+      expect(await screen.findByText(/— cycles of 10\./)).toBeInTheDocument();
+    });
+
     it("warns when everything in scope is cooling down", async () => {
       await expectSentence(
         [{ reratedAt: "2026-08-01" }, { reratedAt: "2026-08-02" }],
-        /0 games ready to re-rate · 2 cooling down from your last cycle — cycles of 1\./,
+        /0 games ready to re-rate · 2 cooling down from your last cycle — cycles of 10\./,
         [
           "Everything in scope is cooling down — starting now resets the cooldown and puts all 2 games back in the pool.",
         ],
@@ -173,7 +210,10 @@ describe("RerateMode — idle screen", () => {
     await screen.findByText(/ready to re-rate/);
     fireEvent.click(screen.getByRole("button", { name: "Start cycle" }));
     expect(await screen.findByText(/Game 1 of 2/)).toBeInTheDocument();
-    expect(apiMock.startRerateSession).toHaveBeenCalledWith(["Playing", "Completed", "Dropped"]);
+    expect(apiMock.startRerateSession).toHaveBeenCalledWith(
+      ["Playing", "Completed", "Dropped"],
+      10,
+    );
   });
 
   it("returns to idle with an error when the pool comes back empty", async () => {

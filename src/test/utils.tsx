@@ -107,7 +107,7 @@ export function makeAnalytics(overrides: Record<string, unknown> = {}) {
     recentlyRated: [],
     ratingTrend: [],
     categoryTrend: [],
-    firstVsRecent: null,
+    latestFive: null,
     gutFeelingGames: [],
     onReflectionGames: [],
     ...overrides,

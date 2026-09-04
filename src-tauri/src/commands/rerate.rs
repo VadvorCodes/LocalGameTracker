@@ -13,8 +13,8 @@ pub struct ReratePoolItem {
     pub similar: Vec<LibraryEntry>,
 }
 
-/// The maximum cycle size; smaller libraries contribute half their (eligible) games.
-const MAX_POOL: usize = 10;
+/// Cycle size used when the caller doesn't pick one.
+const DEFAULT_POOL: usize = 10;
 /// How many genre-similar companion games to show beside the card.
 const SIMILAR_COUNT: usize = 3;
 
@@ -22,13 +22,15 @@ const SIMILAR_COUNT: usize = 3;
 pub fn start_rerate_session(
     state: tauri::State<AppState>,
     statuses: Vec<String>,
+    cycle_size: Option<String>,
 ) -> AppResult<Vec<ReratePoolItem>> {
     let conn = state.db.lock().unwrap();
     let profile =
         super::profile::read_profile(&conn)?.ok_or_else(|| AppError::msg("no profile"))?;
     let statuses = validate_statuses(statuses)?;
+    let cycle_cap = validate_cycle_size(cycle_size.as_deref())?;
 
-    let pool = pick_cycle_pool(&conn, profile.id, &statuses)?;
+    let pool = pick_cycle_pool(&conn, profile.id, &statuses, cycle_cap)?;
 
     // Genre matches come from the whole library (rated or not), so fetch it once.
     let library = super::games::list_library(&conn, profile.id)?;
@@ -64,6 +66,18 @@ fn validate_statuses(statuses: Vec<String>) -> AppResult<Vec<String>> {
         .collect()
 }
 
+/// The chosen cycle size: 5/10/20 cap the pool, "full" takes every eligible
+/// game, and an absent value keeps the default of 10.
+fn validate_cycle_size(size: Option<&str>) -> AppResult<Option<usize>> {
+    match size {
+        None | Some("10") => Ok(Some(DEFAULT_POOL)),
+        Some("5") => Ok(Some(5)),
+        Some("20") => Ok(Some(20)),
+        Some("full") => Ok(None),
+        Some(_) => Err(AppError::msg("invalid cycle size")),
+    }
+}
+
 /// Build one re-rate cycle's pool from already-validated statuses.
 ///
 /// Lifecycle: the previous cycle's tags are still active during selection
@@ -74,6 +88,7 @@ fn pick_cycle_pool(
     conn: &Connection,
     profile_id: i64,
     statuses: &[String],
+    cycle_cap: Option<usize>,
 ) -> AppResult<Vec<LibraryEntry>> {
     // The tag resets and re-selection must be atomic: a crash mid-cycle-start
     // must not leave the cooldown cleared without a pool being served.
@@ -98,7 +113,7 @@ fn pick_cycle_pool(
     // games become eligible again after this one.
     tx.execute("DELETE FROM rerate_tag", [])?;
 
-    let pool_size = pool_size_for(pool.len());
+    let pool_size = pool_size_for(pool.len(), cycle_cap);
     pool.truncate(pool_size);
     tx.commit()?;
     Ok(pool)
@@ -177,12 +192,13 @@ fn tag_rerated(conn: &Connection, entry_id: i64) -> AppResult<()> {
     Ok(())
 }
 
-/// 10 games per cycle, or half the library when fewer than 10 are eligible.
-fn pool_size_for(eligible: usize) -> usize {
-    if eligible >= MAX_POOL {
-        MAX_POOL
-    } else {
-        (eligible / 2).max(1)
+/// The cycle takes the chosen number of games — or all of them when the pool
+/// is smaller; "full" always takes the whole eligible pool. Caller guarantees
+/// `eligible >= 1`.
+fn pool_size_for(eligible: usize, cap: Option<usize>) -> usize {
+    match cap {
+        Some(n) => n.min(eligible).max(1),
+        None => eligible,
     }
 }
 
@@ -289,22 +305,35 @@ mod tests {
     }
 
     #[test]
-    fn pool_size_full_library() {
-        assert_eq!(pool_size_for(10), 10);
-        assert_eq!(pool_size_for(500), MAX_POOL);
+    fn pool_size_full_library_takes_everything() {
+        assert_eq!(pool_size_for(40, None), 40);
+        assert_eq!(pool_size_for(500, None), 500);
     }
 
     #[test]
-    fn pool_size_small_library_is_half() {
-        assert_eq!(pool_size_for(9), 4);
-        assert_eq!(pool_size_for(7), 3);
-        assert_eq!(pool_size_for(2), 1);
+    fn pool_size_caps_at_the_chosen_size() {
+        assert_eq!(pool_size_for(40, Some(20)), 20);
+        assert_eq!(pool_size_for(12, Some(5)), 5);
+        // a pool smaller than the cap cycles all of it
+        assert_eq!(pool_size_for(4, Some(10)), 4);
+        assert_eq!(pool_size_for(4, Some(5)), 4);
     }
 
     #[test]
     fn pool_size_never_zero() {
-        assert_eq!(pool_size_for(1), 1);
-        assert_eq!(pool_size_for(0), 1);
+        assert_eq!(pool_size_for(1, Some(5)), 1);
+        assert_eq!(pool_size_for(0, Some(5)), 1);
+    }
+
+    #[test]
+    fn cycle_size_validation() {
+        assert_eq!(validate_cycle_size(None).unwrap(), Some(DEFAULT_POOL));
+        assert_eq!(validate_cycle_size(Some("5")).unwrap(), Some(5));
+        assert_eq!(validate_cycle_size(Some("10")).unwrap(), Some(10));
+        assert_eq!(validate_cycle_size(Some("20")).unwrap(), Some(20));
+        assert_eq!(validate_cycle_size(Some("full")).unwrap(), None);
+        assert!(validate_cycle_size(Some("12")).is_err());
+        assert!(validate_cycle_size(Some("everything")).is_err());
     }
 
     #[test]
@@ -386,7 +415,7 @@ mod tests {
         tag_rerated(&conn, 1).unwrap();
 
         // Game 1 is cooling down; only game 2 is eligible.
-        let pool = pick_cycle_pool(&conn, 1, &["Completed".to_string()]).unwrap();
+        let pool = pick_cycle_pool(&conn, 1, &["Completed".to_string()], Some(10)).unwrap();
         assert_eq!(sorted_ids(&pool), vec![2]);
 
         // The cycle started, so game 1's tag was cleared and it is eligible again.
@@ -405,8 +434,8 @@ mod tests {
 
         // Nothing is untagged, but the scope has games: starting clears the
         // cooldown instead of dead-ending the feature.
-        let pool = pick_cycle_pool(&conn, 1, &["Completed".to_string()]).unwrap();
-        assert_eq!(pool.len(), 1); // pool_size_for(2) == 1
+        let pool = pick_cycle_pool(&conn, 1, &["Completed".to_string()], Some(10)).unwrap();
+        assert_eq!(pool.len(), 2); // both fit under the default cap of 10
         assert_eq!(tag_count(&conn), 0);
     }
 
@@ -417,7 +446,7 @@ mod tests {
         tag_rerated(&conn, 1).unwrap();
 
         // No Dropped games exist: an empty pool must not wipe game 1's tag.
-        let pool = pick_cycle_pool(&conn, 1, &["Dropped".to_string()]).unwrap();
+        let pool = pick_cycle_pool(&conn, 1, &["Dropped".to_string()], Some(10)).unwrap();
         assert!(pool.is_empty());
         assert_eq!(tag_count(&conn), 1);
     }
