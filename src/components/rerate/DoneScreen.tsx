@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import type { Dispatch } from "react";
 import type { CycleAction, CycleState } from "../../pages/RerateMode";
+import { PartyIcon } from "../icons";
 
 /** The done phase: the cycle's summary and the ways out of it. */
 export default function DoneScreen({
@@ -13,7 +14,7 @@ export default function DoneScreen({
   const kept = cycle.pool.length - cycle.summary.rerated - cycle.summary.skipped;
   return (
     <div className="p-8 max-w-xl mx-auto h-full flex flex-col items-center justify-center text-center space-y-6">
-      <div className="text-5xl">🎉</div>
+      <PartyIcon className="w-12 h-12 text-accent-400" strokeWidth={1.5} />
       <div>
         <h1 className="text-xl font-semibold text-white">Cycle complete</h1>
         <p className="text-sm text-slate-500 mt-2">

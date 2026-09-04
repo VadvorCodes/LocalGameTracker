@@ -51,7 +51,7 @@ describe("SwipeCard rendering", () => {
     expect(card.textContent).toContain("Hollow Knight");
     expect(card.textContent).toContain("Playing");
     expect(card.querySelector('[title="4.5 / 5 stars"]')).toBeInTheDocument();
-    expect(card.textContent).toContain("87.7/100");
+    expect(card.textContent).toContain("87.7 / 100");
     expect(card.textContent).toContain("2h 5m");
     expect(card.textContent).toContain("Metroidvania · Indie · Action · Adventure");
     expect(card.textContent).not.toContain("RPG");

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { api } from "../api";
 import type { LibraryEntry, PlayStatus, RerateDecision, ReratePoolItem } from "../types";
+import type { DropTarget } from "../lib/dropTarget";
 import { useSequentialFetch } from "../hooks/useSequentialFetch";
 import IdleScreen from "../components/rerate/IdleScreen";
 import LoadingScreen from "../components/rerate/LoadingScreen";
@@ -45,7 +46,7 @@ export interface CycleState {
   // Snapshot of the decisions made before the current (re)pass started.
   previousDecisions: Record<number, RerateDecision>;
   dragId: number | null;
-  dropTarget: { pile: RerateDecision; index: number; edge: "top" | "left" | null } | null;
+  dropTarget: (DropTarget & { pile: RerateDecision }) | null;
 }
 
 /**

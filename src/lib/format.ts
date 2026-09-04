@@ -20,6 +20,9 @@ export function scoreColor(v: number): string {
   return "text-rose-300";
 }
 
+/** How many genres preview cards show before the line truncates. */
+export const GENRE_PREVIEW_COUNT = 3;
+
 /**
  * Join the defined parts with " · " into one meta line (developer · release
  * date · genres…). Null, undefined and empty parts are dropped.
@@ -28,7 +31,11 @@ export function metaLine(...parts: (string | null | undefined)[]): string {
   return parts.filter(Boolean).join(" · ");
 }
 
-/** One-line reading of how a star rating (0-5) compares to a 0-100 score. */
+/**
+ * One-line reading of how a star rating (0-5) compares to a 0-100 score.
+ * stars*20 puts both on the same scale; the ±15-point band (0.75 stars) is
+ * the "meaningful disagreement" threshold the dashboard copy quotes too.
+ */
 export function divergenceText(stars: number, overall: number): string {
   const diff = stars * 20 - overall;
   if (diff >= 15)

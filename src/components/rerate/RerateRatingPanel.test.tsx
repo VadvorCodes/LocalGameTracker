@@ -10,6 +10,7 @@ import { apiMock, localCoverMock } from "../../test/apiMock";
 import { useApp } from "../../store";
 import RerateRatingPanel from "./RerateRatingPanel";
 import { makeEntry, makeProfile } from "../../test/utils";
+import { formatDate } from "../../lib/format";
 
 const WEIGHTS = { gameplay: 50, story: 25, music: 15, technical: 10 };
 
@@ -45,12 +46,14 @@ describe("RerateRatingPanel rendering", () => {
     expect(screen.getByText("4/5")).toBeInTheDocument();
     expect(screen.getByText(/Gameplay/).textContent).toContain("was 70");
     expect(screen.getByText(/Music/).textContent).not.toContain("was");
-    expect(screen.getByText(/Rated a while ago/)).toBeInTheDocument();
+    expect(
+      screen.getByText(`Rated ${formatDate("2026-01-01T00:00:00")} — how does it hold up?`),
+    ).toBeInTheDocument();
   });
 
-  it("says 'before' when the game was never rated", () => {
+  it("says 'Not rated yet' when the game has no rated date", () => {
     renderPanel(makeEntry({ ratedAt: null }));
-    expect(screen.getByText(/Rated before/)).toBeInTheDocument();
+    expect(screen.getByText(/Not rated yet/)).toBeInTheDocument();
   });
 
   it("previews the weighted overall with profile weights and renormalisation", () => {
@@ -84,7 +87,7 @@ describe("RerateRatingPanel rendering", () => {
 });
 
 describe("RerateRatingPanel saving", () => {
-  it("with no changes: only marks rerated and hands back the entry untouched", async () => {
+  it("with no changes: only marks rerated and reports the save", async () => {
     apiMock.markRerated.mockResolvedValueOnce(undefined);
     const { entry, onSaved } = renderPanel();
     fireEvent.click(screen.getByRole("button", { name: "Save & continue" }));
@@ -93,10 +96,9 @@ describe("RerateRatingPanel saving", () => {
     expect(apiMock.setStarRating).not.toHaveBeenCalled();
     expect(apiMock.setCategoryScores).not.toHaveBeenCalled();
     expect(apiMock.markRerated).toHaveBeenCalledWith(entry.id);
-    expect(onSaved).toHaveBeenCalledWith(entry);
   });
 
-  it("with only a star change: skips setCategoryScores, passes the star response on", async () => {
+  it("with only a star change: skips setCategoryScores", async () => {
     const updated = makeEntry({ id: 5, starRating: 4 });
     apiMock.setStarRating.mockResolvedValueOnce(updated);
     apiMock.markRerated.mockResolvedValueOnce(undefined);
@@ -104,13 +106,13 @@ describe("RerateRatingPanel saving", () => {
     fireEvent.click(screen.getByLabelText("4 stars"));
     fireEvent.click(screen.getByRole("button", { name: "Save & continue" }));
 
-    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(updated));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
     expect(apiMock.setStarRating).toHaveBeenCalledWith(5, 4);
     expect(apiMock.setCategoryScores).not.toHaveBeenCalled();
     expect(apiMock.markRerated).toHaveBeenCalledWith(5);
   });
 
-  it("with both changed: the category-score response wins as the saved entry", async () => {
+  it("with both changed: persists both before marking rerated", async () => {
     const afterStars = makeEntry({ id: 6, starRating: 4 });
     const afterScores = makeEntry({ id: 6, starRating: 4, gameplay: 80 });
     apiMock.setStarRating.mockResolvedValueOnce(afterStars);
@@ -122,7 +124,7 @@ describe("RerateRatingPanel saving", () => {
     fireEvent.change(screen.getAllByRole("slider")[0], { target: { value: "80" } });
     fireEvent.click(screen.getByRole("button", { name: "Save & continue" }));
 
-    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(afterScores));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
     expect(apiMock.setStarRating).toHaveBeenCalledWith(6, 4);
     expect(apiMock.setCategoryScores).toHaveBeenCalledWith(6, {
       gameplay: 80,

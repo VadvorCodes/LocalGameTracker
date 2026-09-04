@@ -5,6 +5,7 @@ import type { CachedGame, PlayStatus, SearchOutcome } from "../types";
 import FilterGroup from "../components/FilterGroup";
 import MixBar from "../components/MixBar";
 import SearchResultCard from "../components/SearchResultCard";
+import ErrorNote from "../components/ErrorNote";
 import {
   PRESET_LABELS,
   RANK_PRESETS,
@@ -80,6 +81,15 @@ export default function Search() {
     [beginSearch, isCurrentSearch],
   );
 
+  // The one thing the seq guard can't do alone: invalidating an in-flight
+  // search when the query is cleared. Bumping the ticket here makes the late
+  // response drop its setOutcome AND release the loading flag.
+  const clearSearch = useCallback(() => {
+    beginSearch();
+    setLoading(false);
+    setOutcome(null);
+  }, [beginSearch]);
+
   // Reflect what's already owned so cards show "In your library" even after an
   // app restart. Loaded once on mount (and again if the profile changes), plus
   // re-synced after a successful add — not after every search like before.
@@ -118,7 +128,7 @@ export default function Search() {
 
   useEffect(() => {
     if (!effectiveQuery) {
-      setOutcome(null);
+      clearSearch();
       return;
     }
     void runSearch(
@@ -127,7 +137,7 @@ export default function Search() {
       debouncedInput.toYear,
       debouncedInput.hideAdditions,
     );
-  }, [effectiveQuery, debouncedInput, runSearch]);
+  }, [effectiveQuery, debouncedInput, runSearch, clearSearch]);
 
   async function add(game: CachedGame, status: PlayStatus) {
     setAdding(game.rawgId);
@@ -200,7 +210,8 @@ export default function Search() {
           return (
             <button
               key={p}
-              className={`chip py-1.5 ${active ? "bg-accent-600/20 text-accent-400 border-accent-500/40" : "bg-surface-800 text-slate-400 border-surface-600 hover:text-slate-300"}`}
+              aria-pressed={active}
+              className={`chip py-1.5 ${active ? "chip-active" : "chip-idle hover:text-slate-300"}`}
               onClick={() => {
                 setPreset(p);
                 // The panel hosts the manual weight sliders — entering Custom
@@ -216,7 +227,8 @@ export default function Search() {
         })}
         <span className="flex-1" />
         <button
-          className={`chip py-1.5 ${hideAdditions ? "bg-accent-600/20 text-accent-400 border-accent-500/40" : "bg-surface-800 text-slate-400 border-surface-600"}`}
+          aria-pressed={hideAdditions}
+          className={`chip py-1.5 ${hideAdditions ? "chip-active" : "chip-idle"}`}
           title="Excludes DLC, special editions and remasters from results"
           onClick={() => setHideAdditions(!hideAdditions)}
         >
@@ -326,14 +338,22 @@ export default function Search() {
         </div>
       )}
       {error && (
-        <div className="mb-4 chip bg-rose-500/10 text-rose-300 border-rose-500/30 py-1.5">
-          {error}
-        </div>
+        <ErrorNote
+          message={error}
+          onRetry={() =>
+            void runSearch(
+              effectiveQuery,
+              debouncedInput.fromYear,
+              debouncedInput.toYear,
+              debouncedInput.hideAdditions,
+            )
+          }
+        />
       )}
 
       {!query.trim() && (
         <div className="text-center text-slate-600 text-sm mt-24">
-          Start typing to search the RAWG catalogue of 900,000+ games.
+          Start typing to search the RAWG catalogue.
         </div>
       )}
 

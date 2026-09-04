@@ -97,4 +97,16 @@ describe("MixBar", () => {
     fireEvent.keyDown(divider, { key: "Home" });
     expect(onChange).toHaveBeenLastCalledWith({ text: 0.45, popularity: 0, recency: 0.55 });
   });
+
+  it("a pointercancel ends the drag so stray moves stop reallocating", () => {
+    renderBar();
+    vi.spyOn(screen.getByTestId("mix-bar"), "getBoundingClientRect").mockReturnValue(rect(0, 100));
+
+    fireEvent.pointerDown(screen.getByRole("slider", { name: DIVIDER_0 }));
+    fireEvent.pointerCancel(window);
+    onChange.mockClear();
+    fireEvent.pointerMove(window, { clientX: 80 });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });

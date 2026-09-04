@@ -2,6 +2,7 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import type {
   Analytics,
   CachedGame,
+  CategoryScores,
   CategoryWeights,
   LibraryEntry,
   LibraryQuery,
@@ -11,6 +12,7 @@ import type {
   RatingMode,
   SearchFilters,
   SearchOutcome,
+  ThemeId,
   UiSettings,
 } from "./types";
 
@@ -50,15 +52,8 @@ export const api = {
   startRerateSession: (statuses: PlayStatus[]) =>
     invoke<ReratePoolItem[]>("start_rerate_session", { statuses }),
   markRerated: (entryId: number) => invoke<void>("mark_rerated", { entryId }),
-  setCategoryScores: (
-    entryId: number,
-    scores: {
-      gameplay: number | null;
-      story: number | null;
-      music: number | null;
-      technical: number | null;
-    },
-  ) => invoke<LibraryEntry>("set_category_scores", { entryId, scores }),
+  setCategoryScores: (entryId: number, scores: CategoryScores) =>
+    invoke<LibraryEntry>("set_category_scores", { entryId, scores }),
 
   getAnalytics: (mode?: RatingMode) => invoke<Analytics>("get_analytics", { mode }),
 
@@ -66,7 +61,7 @@ export const api = {
   setApiKey: (key: string) => invoke<{ hasKey: boolean }>("set_api_key", { key }),
 
   getSettings: () => invoke<UiSettings>("get_settings"),
-  setTheme: (theme: string) => invoke<UiSettings>("set_theme", { theme }),
+  setTheme: (theme: ThemeId) => invoke<UiSettings>("set_theme", { theme }),
   setCustomTheme: (base: string, accent: string) =>
     invoke<UiSettings>("set_custom_theme", { base, accent }),
   setExtendedSorting: (enabled: boolean) => invoke<UiSettings>("set_extended_sorting", { enabled }),

@@ -61,4 +61,12 @@ body {
   .chip {
     @apply text-xs px-2 py-1 rounded-full border;
   }
+  /* The two toggle-chip tones (selected / not): every filter, preset and
+     segmented chip in the app composes these so they cannot drift. */
+  .chip-active {
+    @apply bg-accent-600/20 text-accent-400 border-accent-500/40;
+  }
+  .chip-idle {
+    @apply bg-surface-800 text-slate-400 border-surface-600;
+  }
 }

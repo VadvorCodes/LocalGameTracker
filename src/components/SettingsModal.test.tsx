@@ -76,9 +76,16 @@ describe("SettingsModal shell", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("closes when clicking the dark backdrop", () => {
+  it("closes when clicking the dark backdrop", async () => {
     const { onClose, container } = renderModal();
     fireEvent.click(container.firstElementChild!);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes on Escape and exposes dialog semantics", async () => {
+    const { onClose, container } = renderModal();
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    fireEvent.keyDown(window, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

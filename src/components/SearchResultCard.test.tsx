@@ -46,9 +46,9 @@ beforeEach(() => {
 });
 
 describe("SearchResultCard", () => {
-  it("renders the meta line as year · developer · first two genres", () => {
+  it("renders the meta line as year · developer · first genres", () => {
     renderCard();
-    expect(screen.getByText("2001 · Bungie · Shooter · Sci-Fi")).toBeInTheDocument();
+    expect(screen.getByText("2001 · Bungie · Shooter · Sci-Fi · Adventure")).toBeInTheDocument();
     expect(screen.getByTitle("Halo")).toBeInTheDocument();
   });
 

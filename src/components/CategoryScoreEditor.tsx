@@ -1,22 +1,16 @@
-import { CATEGORIES, type CategoryKey, type CategoryWeights, type LibraryEntry } from "../types";
+import { CATEGORIES, type CategoryScores, type CategoryWeights, type LibraryEntry } from "../types";
 import { scoreColor } from "../lib/format";
 
-/** Draft scores for the four categories; null = not scored yet. */
-export type CategoryScores = Record<CategoryKey, number | null>;
+export type { CategoryScores };
 
 /** All-null draft (page loads fill it in from the entry). */
 export function emptyCategoryScores(): CategoryScores {
-  return { gameplay: null, story: null, music: null, technical: null };
+  return Object.fromEntries(CATEGORIES.map(({ key }) => [key, null])) as CategoryScores;
 }
 
 /** The saved scores of an entry as a draft-shaped record. */
-export function categoryScoresOf(entry: Pick<LibraryEntry, CategoryKey>): CategoryScores {
-  return {
-    gameplay: entry.gameplay,
-    story: entry.story,
-    music: entry.music,
-    technical: entry.technical,
-  };
+export function categoryScoresOf(entry: Pick<LibraryEntry, keyof CategoryScores>): CategoryScores {
+  return Object.fromEntries(CATEGORIES.map(({ key }) => [key, entry[key]])) as CategoryScores;
 }
 
 /** Whether any category differs between a draft and the saved scores. */

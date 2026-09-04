@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import type { LibraryEntry, RerateDecision, ReratePoolItem } from "../../types";
-import { STATUS_COLORS, STATUS_LABELS } from "../../types";
-import CoverImage from "../CoverImage";
+import CoverImage, { CoverScrim } from "../CoverImage";
+import StatusChip from "../StatusChip";
 import { Stars } from "../StarRating";
 import { formatPlaytime, scoreColor } from "../../lib/format";
 
 const COMMIT_THRESHOLD = 110; // px of drag past which a swipe commits
 const FLY_OUT_X = 700; // px the card travels once a decision is made
+/**
+ * The cover's height cap on short windows. The card's own width cap is this
+ * same cap transferred through the 16/9 aspect, so the card always hugs its
+ * art — one constant, two derived uses.
+ */
+const COVER_MAX_VH = 36;
 
 /**
  * The centrepiece card of the swipe phase. Drag left = "re-rate", right =
@@ -75,6 +81,7 @@ export default function SwipeCard({
         transition: dragging ? "none" : "transform 280ms cubic-bezier(0.2, 0.8, 0.3, 1)",
         touchAction: "none",
         opacity: flying ? 0.15 : 1,
+        maxWidth: `calc(${COVER_MAX_VH}vh * 16 / 9)`,
       }}
       onTransitionEnd={onTransitionEnd}
       onPointerDown={(e) => {
@@ -92,15 +99,18 @@ export default function SwipeCard({
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
     >
-      {/* The cover always spans the full card width; only on short windows
-          does it yield height (max-h) so the text below stays reachable. */}
-      <div className="relative aspect-[16/9] max-h-[36vh] overflow-hidden">
+      {/* The cover spans the full card width; on short windows it yields
+          height so the text below stays reachable — hence COVER_MAX_VH. */}
+      <div
+        className="relative aspect-[16/9] overflow-hidden"
+        style={{ maxHeight: `${COVER_MAX_VH}vh` }}
+      >
         <CoverImage
           url={entry.coverUrl}
           alt={entry.name}
           className="w-full h-full object-cover pointer-events-none"
         />
-        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-surface-900 to-transparent" />
+        <CoverScrim className="h-20" />
       </div>
       <div className="p-4 space-y-3">
         {/* Below xl (the 1280 default window) the chip hugs the title instead
@@ -108,11 +118,7 @@ export default function SwipeCard({
             the chip, never between it and the title. */}
         <div className="flex flex-wrap items-start justify-start gap-x-2 gap-y-1 xl:justify-between">
           <h2 className="text-lg font-semibold text-white leading-tight">{entry.name}</h2>
-          <span
-            className={`chip shrink-0 ${STATUS_COLORS[entry.status].bg} ${STATUS_COLORS[entry.status].text} ${STATUS_COLORS[entry.status].border}`}
-          >
-            {STATUS_LABELS[entry.status]}
-          </span>
+          <StatusChip status={entry.status} className="shrink-0" />
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <Stars value={entry.starRating} />
@@ -120,7 +126,7 @@ export default function SwipeCard({
             <span className="flex items-center gap-2">
               <span className="text-[11px] uppercase tracking-wide text-slate-500">Detailed</span>
               <span className={`text-sm font-semibold ${scoreColor(entry.computedOverall)}`}>
-                {entry.computedOverall.toFixed(1)}/100
+                {entry.computedOverall.toFixed(1)} / 100
               </span>
             </span>
           ) : (

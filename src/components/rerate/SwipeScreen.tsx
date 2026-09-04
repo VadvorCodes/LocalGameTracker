@@ -4,7 +4,7 @@ import type { CycleAction, CycleState } from "../../pages/RerateMode";
 import SwipeBackdrop from "./SwipeBackdrop";
 import SwipeCard from "./SwipeCard";
 import MatchCard from "./MatchCard";
-import DecisionButton from "./DecisionButton";
+import DecisionButton, { DecisionSquare } from "./DecisionButton";
 
 /**
  * The swipe phase: one card at a time over a progress strip of piles. Decisions
@@ -52,15 +52,7 @@ export default function SwipeScreen({
                       : "bg-surface-700"
                 }`}
               />
-              <div
-                className={`h-2.5 w-2.5 rounded-sm transition-colors ${
-                  cycle.revisiting && prev
-                    ? prev === "rerate"
-                      ? "bg-rose-500"
-                      : "bg-emerald-500"
-                    : "bg-transparent"
-                }`}
-              />
+              <DecisionSquare tone={prev ?? "keep"} marked={cycle.revisiting && prev != null} />
             </div>
           );
         })}

@@ -49,7 +49,17 @@ export default function PlaytimeDatesSection({
   const [dateError, setDateError] = useState<string | null>(null);
 
   async function savePlaytime() {
-    const h = Math.max(0, Math.floor(Number(hours) || 0));
+    // An empty or non-numeric field is a transient edit, not a wish to
+    // zero the tracked playtime — restore the saved value instead of
+    // committing 0. Typing an explicit 0 is a real "Not tracked".
+    const parsed = Number(hours);
+    if (hours.trim() === "" || !Number.isFinite(parsed) || parsed < 0) {
+      const restored = String(Math.floor(entry.playtimeMinutes / 60));
+      setHours(restored);
+      setHoursPreset(hoursPresetFor(restored));
+      return;
+    }
+    const h = Math.floor(parsed);
     // An exact preset value typed into the custom field snaps back to the preset.
     setHoursPreset(hoursPresetFor(String(h)));
     await onPatch({ playtimeMinutes: h * 60 });

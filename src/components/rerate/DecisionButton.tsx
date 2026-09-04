@@ -1,6 +1,30 @@
 import type { RerateDecision } from "../../types";
 
 /**
+ * The small square that remembers a decision: red for re-rate, green for
+ * keep, invisible while unmarked. Used under the decision buttons and in the
+ * progress strip.
+ */
+export function DecisionSquare({
+  tone,
+  marked,
+  title,
+}: {
+  tone: RerateDecision;
+  marked: boolean;
+  title?: string;
+}) {
+  return (
+    <div
+      className={`h-2.5 w-2.5 rounded-sm transition-colors ${
+        marked ? (tone === "rerate" ? "bg-rose-500" : "bg-emerald-500") : "bg-transparent"
+      }`}
+      title={title}
+    />
+  );
+}
+
+/**
  * Swipe-phase decision button. When revisiting (after "Back to swiping") a
  * small square appears under the side chosen last time, as a reminder — the
  * pass itself is fresh, so both buttons stay active.
@@ -28,12 +52,7 @@ export default function DecisionButton({
       >
         {label}
       </button>
-      <div
-        className={`h-2.5 w-2.5 rounded-sm transition-colors ${
-          marked ? (isRerate ? "bg-rose-500" : "bg-emerald-500") : "bg-transparent"
-        }`}
-        title={marked ? "Chosen last time" : undefined}
-      />
+      <DecisionSquare tone={kind} marked={marked} title={marked ? "Chosen last time" : undefined} />
     </div>
   );
 }

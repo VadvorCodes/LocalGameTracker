@@ -112,6 +112,28 @@ describe("Search — debouncing", () => {
     act(() => vi.advanceTimersByTime(1000));
     expect(apiMock.searchGames).toHaveBeenCalledTimes(1); // no search for whitespace
   });
+
+  it("drops an in-flight response that lands after the query was cleared", async () => {
+    renderSearch();
+    const slow = deferred<SearchOutcome>();
+    apiMock.searchGames.mockReturnValueOnce(slow.promise);
+    typeQuery("hal");
+    act(() => vi.advanceTimersByTime(350));
+    expect(screen.getByText("searching…")).toBeInTheDocument();
+
+    // clearing mid-flight must invalidate the pending request, not just the input
+    typeQuery("");
+    expect(screen.queryByText("searching…")).toBeNull();
+
+    await act(async () => {
+      slow.resolve({ games: [game()], source: "live" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // the late response must not repopulate results under an empty input
+    expect(screen.queryByTitle("Halo")).toBeNull();
+    expect(screen.getByText(/Start typing to search/)).toBeInTheDocument();
+  });
 });
 
 describe("Search — response races", () => {
@@ -204,7 +226,7 @@ describe("Search — results rendering", () => {
     expect(screen.getByText("Offline — showing results from your local cache")).toBeInTheDocument();
   });
 
-  it("renders the meta line as year · developer · first two genres", async () => {
+  it("renders the meta line as year · developer · genres · metacritic", async () => {
     renderSearch();
     await searchFor("halo", { games: [game()], source: "live" });
     expect(screen.getByText("2001 · Bungie · Shooter · Sci-Fi")).toBeInTheDocument();
@@ -370,8 +392,8 @@ describe("Search — ranking and filters", () => {
     await searchFor("call of duty", codOutcome());
     fireEvent.click(screen.getByText("Custom"));
     // Untouched Custom keeps the neutral chip style, not the bright active one.
-    expect(screen.getByText("Custom")).toHaveClass("text-slate-400");
-    expect(screen.getByText("Custom")).not.toHaveClass("text-accent-400");
+    expect(screen.getByText("Custom")).toHaveClass("chip-idle");
+    expect(screen.getByText("Custom")).not.toHaveClass("chip-active");
     expect(screen.getByText("Ranking mix")).toBeInTheDocument();
     // The bar starts at the Balanced split (45 / 30 / 25).
     expect(screen.getByText("45%")).toBeInTheDocument();
@@ -383,11 +405,11 @@ describe("Search — ranking and filters", () => {
       key: "ArrowRight",
     });
     expect(screen.getByText("46%")).toBeInTheDocument();
-    expect(screen.getByText("Custom")).toHaveClass("text-accent-400");
+    expect(screen.getByText("Custom")).toHaveClass("chip-active");
     expect(screen.getByText("Reset")).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Reset"));
-    expect(screen.getByText("Custom")).not.toHaveClass("text-accent-400");
+    expect(screen.getByText("Custom")).not.toHaveClass("chip-active");
     expect(screen.queryByText("Reset")).toBeNull();
     // Readouts back to the balanced defaults (45 / 30 / 25).
     expect(screen.getByText("45%")).toBeInTheDocument();

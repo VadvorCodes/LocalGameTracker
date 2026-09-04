@@ -1,6 +1,4 @@
-import type { CategoryWeights } from "../types";
-
-export type ScoreCategory = "gameplay" | "story" | "music" | "technical";
+import type { CategoryScores, CategoryWeights } from "../types";
 
 /**
  * Preview of the weighted overall score for a (possibly partial) draft,
@@ -10,7 +8,7 @@ export type ScoreCategory = "gameplay" | "story" | "music" | "technical";
  * no filled category scores to null.
  */
 export function computeWeightedOverall(
-  scores: Record<ScoreCategory, number | null>,
+  scores: CategoryScores,
   weights: CategoryWeights,
 ): number | null {
   const pairs: [number | null, number][] = [

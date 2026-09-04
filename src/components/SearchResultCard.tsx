@@ -1,6 +1,6 @@
 import type { CachedGame, PlayStatus } from "../types";
 import { STATUSES, STATUS_LABELS } from "../types";
-import { metaLine } from "../lib/format";
+import { metaLine, GENRE_PREVIEW_COUNT } from "../lib/format";
 import CoverImage from "./CoverImage";
 
 /**
@@ -49,7 +49,7 @@ export default function SearchResultCard({
           {metaLine(
             game.releaseDate?.split("-")[0],
             game.developer,
-            ...game.genres.slice(0, 2),
+            ...game.genres.slice(0, GENRE_PREVIEW_COUNT),
             game.metacritic != null ? `MC ${game.metacritic}` : null,
           )}
         </p>

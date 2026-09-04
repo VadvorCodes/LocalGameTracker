@@ -9,14 +9,14 @@ export function Stars({ value }: { value: number | null }) {
       {[0, 1, 2, 3, 4].map((i) => (
         <span key={i} className="relative inline-block w-4 h-4">
           <span className="absolute inset-0 text-surface-600">
-            <StarIcon filled />
+            <StarIcon />
           </span>
           <span
             className="absolute inset-0 overflow-hidden"
             data-testid="star-fill"
             style={{ width: `${Math.max(0, Math.min(1, value - i)) * 100}%` }}
           >
-            <StarIcon filled />
+            <StarIcon />
           </span>
         </span>
       ))}
@@ -42,7 +42,12 @@ export function StarPicker({
     onChange(value === v ? null : v);
   }
   return (
-    <div className="flex items-center gap-1 select-none" onMouseLeave={() => setHover(null)}>
+    <div
+      className="flex items-center gap-1 select-none"
+      role="group"
+      aria-label="Star rating"
+      onMouseLeave={() => setHover(null)}
+    >
       {[1, 2, 3, 4, 5].map((star) => {
         const fill = Math.max(0, Math.min(1, shown - (star - 1)));
         return (
@@ -64,7 +69,7 @@ export function StarPicker({
             <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <span className="relative inline-block w-5 h-5">
                 <span className="absolute inset-0 text-surface-600">
-                  <StarIcon filled className="w-5 h-5" />
+                  <StarIcon className="w-5 h-5" />
                 </span>
                 {/* Clip container is exactly the glyph size, so a 50% width
                     clips the glyph at exactly its midpoint. */}
@@ -73,7 +78,7 @@ export function StarPicker({
                   data-testid="star-fill"
                   style={{ width: `${fill * 100}%` }}
                 >
-                  <StarIcon filled className="w-5 h-5" />
+                  <StarIcon className="w-5 h-5" />
                 </span>
               </span>
             </span>

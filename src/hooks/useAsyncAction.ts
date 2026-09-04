@@ -1,5 +1,14 @@
 import { useCallback, useRef, useState } from "react";
 
+/**
+ * What a caught failure should read like in the UI: an Error's message without
+ * the "Error: " prefix String() would add; anything else (Tauri IPC errors are
+ * plain strings) verbatim.
+ */
+function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 /** The busy/error bookkeeping one async mutation needs. */
 export interface AsyncAction {
   /** True while a wrapped call is in flight; drives disabled states and labels. */
@@ -36,7 +45,7 @@ export function useAsyncAction(): AsyncAction {
     try {
       return await action();
     } catch (e) {
-      setError(String(e));
+      setError(errorMessage(e));
       return undefined;
     } finally {
       inFlightRef.current = false;

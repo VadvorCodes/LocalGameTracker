@@ -40,7 +40,7 @@ describe("useAsyncAction", () => {
       });
     });
     expect(result.current.pending).toBe(false);
-    expect(result.current.error).toBe("Error: boom");
+    expect(result.current.error).toBe("boom");
     await expect(promise).resolves.toBeUndefined();
   });
 
@@ -85,7 +85,7 @@ describe("useAsyncAction", () => {
         throw new Error("first fails");
       });
     });
-    expect(result.current.error).toBe("Error: first fails");
+    expect(result.current.error).toBe("first fails");
 
     await act(async () => {
       await result.current.run(async () => "ok");
@@ -100,7 +100,7 @@ describe("useAsyncAction", () => {
         throw new Error("boom");
       });
     });
-    expect(result.current.error).toBe("Error: boom");
+    expect(result.current.error).toBe("boom");
 
     act(() => result.current.reset());
     expect(result.current.error).toBeNull();

@@ -13,6 +13,13 @@ const DEFAULT_SETTINGS: UiSettings = {
 interface AppState {
   profile: Profile | null;
   profileLoading: boolean;
+  /** Set when reading the profile failed — a failed read is not "no profile". */
+  profileError: string | null;
+  /**
+   * Whether the backend has a RAWG key. Starts false (the honest unknown:
+   * claiming a key exists would suppress Search's "no key" banner) and keeps
+   * its last known value when a re-check fails.
+   */
   hasApiKey: boolean;
   settings: UiSettings;
   loadProfile: () => Promise<void>;
@@ -25,14 +32,18 @@ interface AppState {
 export const useApp = create<AppState>((set) => ({
   profile: null,
   profileLoading: true,
-  hasApiKey: true,
+  profileError: null,
+  hasApiKey: false,
   settings: DEFAULT_SETTINGS,
   loadProfile: async () => {
+    set({ profileLoading: true, profileError: null });
     try {
       const p = await api.getProfile();
       set({ profile: p, profileLoading: false });
-    } catch {
-      set({ profile: null, profileLoading: false });
+    } catch (e) {
+      // Keep whatever profile we had: routing an existing user to Onboarding
+      // would have them create a second profile over a busy backend.
+      set({ profileError: String(e), profileLoading: false });
     }
   },
   loadApiKeyStatus: async () => {
@@ -40,7 +51,7 @@ export const useApp = create<AppState>((set) => ({
       const { hasKey } = await api.getApiKey();
       set({ hasApiKey: hasKey });
     } catch {
-      /* non-fatal */
+      /* non-fatal: keep the last known flag */
     }
   },
   loadSettings: async () => {

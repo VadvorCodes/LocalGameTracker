@@ -5,6 +5,8 @@ import type { LibraryEntry, LibraryQuery, PlayStatus, SortKey } from "../types";
 import { SORT_LABELS, STATUSES, STATUS_COLORS, STATUS_LABELS } from "../types";
 import { GameCard, SkeletonCard } from "../components/GameCard";
 import FilterGroup from "../components/FilterGroup";
+import ErrorNote from "../components/ErrorNote";
+import { JoystickIcon } from "../components/icons";
 import { formatPlaytime } from "../lib/format";
 import { toggleSet } from "../lib/sets";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
@@ -66,13 +68,12 @@ export default function Library() {
   // chosen direction) without ever rendering a mismatched select.
   const effectiveSort = extendedSorting || !EXTENDED_SORTS.includes(sort) ? sort : "stars";
 
-  // The exact payload sent over IPC. Memoized (with the profile folded in, so
-  // a profile switch restarts the debounce like any other input) — its identity
-  // changes only when a query input actually changed.
+  // The exact payload sent over IPC. Memoized so its identity changes only
+  // when a query input actually changed; `profile` is folded into the deps so
+  // a profile change restarts the debounce cycle like any other input.
   const queryInput = useMemo(
-    () => ({
-      profileId: profile?.id,
-      q: {
+    () =>
+      ({
         search: search.trim() || undefined,
         statuses: [...filters.statuses],
         favouritesOnly: filters.favouritesOnly || undefined,
@@ -82,8 +83,7 @@ export default function Library() {
         minScore: filters.minScore > 0 ? filters.minScore : undefined,
         sort: effectiveSort,
         sortDesc,
-      } satisfies LibraryQuery,
-    }),
+      }) satisfies LibraryQuery,
     [profile, search, filters, effectiveSort, sortDesc],
   );
   // useDebouncedValue passes its first value straight through, so the chain
@@ -101,7 +101,7 @@ export default function Library() {
     const seq = beginQuery();
     setLoading(true);
     try {
-      const result = await api.libraryQuery(debouncedInput.q);
+      const result = await api.libraryQuery(debouncedInput);
       if (!isCurrentQuery(seq)) return; // a newer query superseded this one
       setEntries(result);
       setError(null);
@@ -216,25 +216,19 @@ export default function Library() {
         </div>
       </div>
 
-      {error && (
-        <div className="mb-4 chip bg-rose-500/10 text-rose-300 border-rose-500/30 py-1.5">
-          {error}
-        </div>
-      )}
+      {error && <ErrorNote message={error} onRetry={() => void load()} />}
 
       {filterPanel && (
         <div className="card p-4 mb-6 space-y-4">
           <div className="flex flex-wrap gap-2">
             {STATUSES.map((s) => {
               const c = STATUS_COLORS[s];
+              const on = filters.statuses.has(s);
               return (
                 <button
                   key={s}
-                  className={`chip py-1.5 ${
-                    filters.statuses.has(s)
-                      ? `${c.bg} ${c.text} ${c.border}`
-                      : "bg-surface-800 text-slate-400 border-surface-600"
-                  }`}
+                  aria-pressed={on}
+                  className={`chip py-1.5 ${on ? `${c.bg} ${c.text} ${c.border}` : "chip-idle"}`}
                   onClick={() => setFilters((f) => ({ ...f, statuses: toggleSet(f.statuses, s) }))}
                 >
                   {STATUS_LABELS[s]}
@@ -242,7 +236,12 @@ export default function Library() {
               );
             })}
             <button
-              className={`chip py-1.5 ${filters.favouritesOnly ? "bg-rose-500/15 text-rose-300 border-rose-500/30" : "bg-surface-800 text-slate-400 border-surface-600"}`}
+              aria-pressed={filters.favouritesOnly}
+              className={`chip py-1.5 ${
+                filters.favouritesOnly
+                  ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+                  : "chip-idle"
+              }`}
               onClick={() => setFilters((f) => ({ ...f, favouritesOnly: !f.favouritesOnly }))}
             >
               ♥ Favourites
@@ -319,7 +318,7 @@ export default function Library() {
         </div>
       ) : entries.length === 0 ? (
         <div className="text-center mt-24">
-          <div className="text-4xl mb-3">🕹️</div>
+          <JoystickIcon className="w-10 h-10 text-slate-500 mx-auto mb-3" strokeWidth={1.5} />
           <p className="text-slate-400">
             {activeFilters || search
               ? "No games match these filters."

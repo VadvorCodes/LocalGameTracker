@@ -185,6 +185,20 @@ describe("Dashboard — conditional sections", () => {
     expect((radar!.data as unknown[]).length).toBe(4);
   });
 
+  it("renders the radar for music/technical-only raters too", async () => {
+    // rating only the back half of the categories must still produce a radar
+    apiMock.getAnalytics.mockResolvedValueOnce(
+      makeAnalytics({
+        avgOverall: 60,
+        categoryAverages: { gameplay: null, story: null, music: 70, technical: 45 },
+      }),
+    );
+    renderDashboard();
+    await screen.findByText("My gaming dashboard");
+    expect(screen.getByText("Category Profile")).toBeInTheDocument();
+    expect(chart(document.body, "RadarChart")).not.toBeNull();
+  });
+
   it("hides detailed-score chart data when every bucket is zero", async () => {
     apiMock.getAnalytics.mockResolvedValueOnce(
       makeAnalytics({

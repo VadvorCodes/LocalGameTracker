@@ -9,7 +9,6 @@ export default function SidebarUsername() {
   const setProfile = useApp((s) => s.setProfile);
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
-  const [busy, setBusy] = useState(false);
   // Ref-based guard: handlers captured by onBlur survive into the commit that
   // unmounts the input, so a state check alone is not closure-proof.
   const busyRef = useRef(false);
@@ -27,14 +26,12 @@ export default function SidebarUsername() {
     setEditing(false);
     if (!next || next === profile!.username) return;
     busyRef.current = true;
-    setBusy(true);
     try {
       setProfile(await api.renameProfile(next));
     } catch {
       /* keep old name on failure */
     } finally {
       busyRef.current = false;
-      setBusy(false);
     }
   }
 
@@ -42,10 +39,9 @@ export default function SidebarUsername() {
     return (
       <input
         autoFocus
-        className="mt-2 w-full px-3 py-1.5 text-xs bg-surface-800 border border-accent-500 rounded-lg text-slate-200 outline-none"
+        className="input mt-2 w-full !px-3 !py-1.5 !text-xs"
         maxLength={32}
         value={value}
-        disabled={busy}
         onChange={(e) => setValue(e.target.value)}
         onBlur={save}
         onKeyDown={(e) => {

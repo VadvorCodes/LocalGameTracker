@@ -11,7 +11,7 @@ import CategoryScoreEditor, {
   categoryScoresOf,
   type CategoryScores,
 } from "../CategoryScoreEditor";
-import { divergenceText } from "../../lib/format";
+import { divergenceText, formatDate } from "../../lib/format";
 import { computeWeightedOverall } from "../../lib/scoring";
 
 /**
@@ -26,7 +26,7 @@ export default function RerateRatingPanel({
   onSkipped,
 }: {
   entry: LibraryEntry;
-  onSaved: (updated: LibraryEntry) => void;
+  onSaved: () => void;
   onSkipped: () => void;
 }) {
   const profile = useApp((s) => s.profile);
@@ -43,15 +43,14 @@ export default function RerateRatingPanel({
     setBusy(true);
     setError(null);
     try {
-      let updated = entry;
       if (starDraft !== entry.starRating) {
-        updated = await api.setStarRating(entry.id, starDraft);
+        await api.setStarRating(entry.id, starDraft);
       }
       if (categoryScoresDirty(catDraft, entry)) {
-        updated = await api.setCategoryScores(entry.id, catDraft);
+        await api.setCategoryScores(entry.id, catDraft);
       }
       await api.markRerated(entry.id);
-      onSaved(updated);
+      onSaved();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -72,7 +71,8 @@ export default function RerateRatingPanel({
         <div className="min-w-0 flex-1 basis-48">
           <h2 className="text-lg font-semibold text-white leading-tight truncate">{entry.name}</h2>
           <p className="text-xs text-slate-500 mt-0.5 truncate">
-            Rated {entry.ratedAt ? "a while ago" : "before"} — how does it hold up?
+            {entry.ratedAt ? `Rated ${formatDate(entry.ratedAt)}` : "Not rated yet"} — how does it
+            hold up?
           </p>
         </div>
       </div>

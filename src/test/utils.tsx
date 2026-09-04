@@ -102,7 +102,6 @@ export function makeAnalytics(overrides: Record<string, unknown> = {}) {
     starDistribution: [1, 2, 3, 4, 5].map((x) => ({ x, y: 0 })),
     scoreDistribution: Array.from({ length: 10 }, (_, i) => ({ x: i * 10, y: 0 })),
     genreBreakdown: [],
-    platformBreakdown: [],
     highestRated: [],
     lowestRated: [],
     recentlyRated: [],

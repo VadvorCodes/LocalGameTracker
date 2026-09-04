@@ -46,6 +46,9 @@ export const CATEGORIES = [
 
 export type CategoryKey = (typeof CATEGORIES)[number]["key"];
 
+/** Detailed scores for the four categories; null = not scored yet. */
+export type CategoryScores = Record<CategoryKey, number | null>;
+
 /** Which ratings an analytics view includes. */
 export type RatingMode = "stars" | "detailed" | "both";
 
@@ -147,7 +150,7 @@ export interface LibraryQuery {
   maxStars?: number;
   minScore?: number;
   maxScore?: number;
-  sort?: string;
+  sort?: SortKey;
   sortDesc?: boolean;
 }
 
@@ -185,7 +188,7 @@ export interface SearchOutcome {
 
 export interface Analytics {
   totalGames: number;
-  statusCounts: { status: string; count: number }[];
+  statusCounts: { status: PlayStatus; count: number }[];
   favourites: number;
   totalPlaytimeMinutes: number;
   avgStars: number | null;
@@ -199,7 +202,6 @@ export interface Analytics {
   starDistribution: { x: number; y: number }[];
   scoreDistribution: { x: number; y: number }[];
   genreBreakdown: Breakdown[];
-  platformBreakdown: Breakdown[];
   highestRated: MiniEntry[];
   lowestRated: MiniEntry[];
   recentlyRated: MiniEntry[];

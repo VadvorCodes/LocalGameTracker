@@ -17,7 +17,8 @@ export default function FilterGroup({
         {options.map((o) => (
           <button
             key={o}
-            className={`chip ${selected.has(o) ? "bg-accent-600/20 text-accent-400 border-accent-500/40" : "bg-surface-800 text-slate-400 border-surface-600"}`}
+            aria-pressed={selected.has(o)}
+            className={`chip ${selected.has(o) ? "chip-active" : "chip-idle"}`}
             onClick={() => onToggle(o)}
           >
             {o}

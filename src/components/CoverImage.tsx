@@ -18,6 +18,7 @@ export default function CoverImage({
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    if (!url) return; // nothing to resolve — no cover art exists
     let alive = true;
     setSrc(null);
     setFailed(false);
@@ -32,7 +33,7 @@ export default function CoverImage({
       <div
         className={`${className} bg-surface-700 flex items-center justify-center text-slate-500 text-xs px-2 text-center`}
       >
-        {failed ? alt : "…"}
+        {failed ? alt : "No cover art"}
       </div>
     );
   }
@@ -43,6 +44,18 @@ export default function CoverImage({
       loading="lazy"
       onError={() => setFailed(true)}
       className={className}
+    />
+  );
+}
+
+/**
+ * Bottom fade that keeps overlaid content readable on cover art. The height
+ * is the caller's — it depends on how much text sits on the art.
+ */
+export function CoverScrim({ className = "h-16" }: { className?: string }) {
+  return (
+    <div
+      className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-surface-900 to-transparent ${className}`}
     />
   );
 }

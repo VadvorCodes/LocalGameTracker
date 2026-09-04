@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import CustomisationTab from "./settings/CustomisationTab";
 import GeneralTab from "./settings/GeneralTab";
 
@@ -14,12 +14,24 @@ type TabId = (typeof TABS)[number]["id"];
 export default function SettingsModal({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<TabId>("general");
 
+  // Escape closes, like the backdrop click.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6"
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Settings"
         className="card max-w-xl w-full p-6 max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
@@ -34,9 +46,10 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
           {TABS.map((t) => (
             <button
               key={t.id}
+              aria-pressed={tab === t.id}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 tab === t.id
-                  ? "bg-accent-600/20 text-accent-400"
+                  ? "chip-active"
                   : "text-slate-400 hover:bg-surface-800 hover:text-slate-200"
               }`}
               onClick={() => setTab(t.id)}

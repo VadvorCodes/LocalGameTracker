@@ -83,11 +83,13 @@ describe("GameDetail — loading", () => {
     expect(screen.getByDisplayValue("5+ hours")).toBeInTheDocument();
   });
 
-  it("makes no request for a non-numeric id and keeps the skeleton", async () => {
+  it("shows an error (not an eternal skeleton) for a non-numeric id and makes no request", async () => {
     renderDetail("/game/abc");
-    await act(async () => {});
+    expect(await screen.findByText(/Invalid entry id/)).toBeInTheDocument();
     expect(apiMock.getLibraryEntry).not.toHaveBeenCalled();
-    expect(document.querySelector(".animate-pulse")).toBeInTheDocument();
+    expect(document.querySelector(".animate-pulse")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Back to library" }));
+    expect(screen.getByText("library-page")).toBeInTheDocument();
   });
 
   it("shows an error state with a way back when loading fails", async () => {
@@ -190,7 +192,20 @@ describe("GameDetail — hours played", () => {
     const input = screen.getByRole("spinbutton");
     fireEvent.change(input, { target: { value: "-5" } });
     fireEvent.blur(input);
-    expect(apiMock.updateLibraryEntry).toHaveBeenCalledWith(5, { playtimeMinutes: 0 });
+    // a transient invalid edit restores the tracked value instead of zeroing it
+    expect(apiMock.updateLibraryEntry).not.toHaveBeenCalled();
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+    expect(screen.getByDisplayValue("5+ hours")).toBeInTheDocument();
+  });
+
+  it("restores the tracked value when the custom field is cleared and blurred", async () => {
+    await renderLoaded();
+    fireEvent.change(screen.getByDisplayValue("5+ hours"), { target: { value: "custom" } });
+    const input = screen.getByRole("spinbutton");
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.blur(input);
+    expect(apiMock.updateLibraryEntry).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue("5+ hours")).toBeInTheDocument();
   });
 });
 
@@ -240,7 +255,7 @@ describe("GameDetail — notes", () => {
     expect(screen.getByText("← Back")).toBeEnabled();
   });
 
-  it("replaces the page with the error state when saving notes fails", async () => {
+  it("keeps the page and the drafts alive when saving notes fails", async () => {
     apiMock.updateLibraryEntry.mockRejectedValueOnce(new Error("disk full"));
     await renderLoaded();
     fireEvent.change(screen.getByPlaceholderText(/Private notes/), {
@@ -248,9 +263,10 @@ describe("GameDetail — notes", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save notes" }));
 
-    // a patch failure surfaces the page-level error state (the editor unmounts)
-    expect(await screen.findByText(/disk full/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Save notes" })).toBeNull();
+    // the failure surfaces as a banner; the editor stays mounted with the draft
+    expect(await screen.findByText(/That didn’t save/)).toHaveTextContent("disk full");
+    expect(screen.getByPlaceholderText(/Private notes/)).toHaveValue("lost words");
+    expect(screen.getByRole("button", { name: "Save notes" })).toBeInTheDocument();
   });
 });
 
@@ -259,8 +275,8 @@ describe("GameDetail — detailed score", () => {
     await renderLoaded(); // gameplay=70 saved, others null
     const sliders = screen.getAllByRole("slider");
     expect(sliders[1]).toHaveValue("50"); // story unset → position 50
-    expect(screen.getByText("story: unset")).toBeInTheDocument();
-    expect(screen.getByText("clear gameplay")).toBeInTheDocument();
+    expect(screen.getByText("Storytelling: not set")).toBeInTheDocument();
+    expect(screen.getByText("Clear Gameplay")).toBeInTheDocument();
     // preview from the one saved category: 70 * (50/50) = 70.0
     expect(screen.getByText("70.0")).toBeInTheDocument();
   });
@@ -285,8 +301,8 @@ describe("GameDetail — detailed score", () => {
 
   it("clears a category back to unset via its chip", async () => {
     await renderLoaded();
-    fireEvent.click(screen.getByText("clear gameplay"));
-    expect(screen.getByText("gameplay: unset")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Clear Gameplay"));
+    expect(screen.getByText("Gameplay: not set")).toBeInTheDocument();
     // all four categories unset plus the empty preview
     expect(screen.getAllByText("—").length).toBe(5);
   });

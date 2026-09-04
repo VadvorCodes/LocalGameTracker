@@ -1,14 +1,15 @@
 import type { LibraryEntry } from "../types";
-import { STATUS_COLORS, STATUS_LABELS } from "../types";
-import CoverImage from "./CoverImage";
+import CoverImage, { CoverScrim } from "./CoverImage";
+import StatusChip from "./StatusChip";
 import { Stars } from "./StarRating";
 import { HeartIcon } from "./icons";
-import { formatPlaytime, scoreColor } from "../lib/format";
+import { formatPlaytime, scoreColor, GENRE_PREVIEW_COUNT } from "../lib/format";
 
 export function GameCard({ entry, onOpen }: { entry: LibraryEntry; onOpen: (id: number) => void }) {
   return (
-    <div
-      className="card overflow-hidden cursor-pointer group hover:border-accent-500/50 transition-colors"
+    <button
+      type="button"
+      className="card overflow-hidden cursor-pointer group hover:border-accent-500/50 transition-colors block w-full text-left"
       onClick={() => onOpen(entry.id)}
     >
       <div className="relative aspect-[16/9] overflow-hidden">
@@ -17,7 +18,7 @@ export function GameCard({ entry, onOpen }: { entry: LibraryEntry; onOpen: (id: 
           alt={entry.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
         />
-        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-surface-900 to-transparent" />
+        <CoverScrim />
         {entry.favourite && (
           <div
             className="absolute top-2 right-2 text-rose-400 bg-surface-950/70 rounded-full p-1.5"
@@ -34,11 +35,7 @@ export function GameCard({ entry, onOpen }: { entry: LibraryEntry; onOpen: (id: 
         </h3>
         <div className="mt-2 space-y-1.5">
           <div>
-            <span
-              className={`chip ${STATUS_COLORS[entry.status].bg} ${STATUS_COLORS[entry.status].text} ${STATUS_COLORS[entry.status].border}`}
-            >
-              {STATUS_LABELS[entry.status]}
-            </span>
+            <StatusChip status={entry.status} />
           </div>
           <div className="flex items-center gap-2">
             <Stars value={entry.starRating} />
@@ -54,11 +51,13 @@ export function GameCard({ entry, onOpen }: { entry: LibraryEntry; onOpen: (id: 
         {(entry.playtimeMinutes > 0 || entry.genres.length > 0) && (
           <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500 truncate">
             {entry.playtimeMinutes > 0 && <span>{formatPlaytime(entry.playtimeMinutes)}</span>}
-            <span className="truncate">{entry.genres.slice(0, 3).join(" · ")}</span>
+            <span className="truncate">
+              {entry.genres.slice(0, GENRE_PREVIEW_COUNT).join(" · ")}
+            </span>
           </div>
         )}
       </div>
-    </div>
+    </button>
   );
 }
 

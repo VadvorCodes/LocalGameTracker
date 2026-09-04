@@ -10,15 +10,16 @@ import { localCoverMock } from "../test/apiMock";
 import CoverImage from "./CoverImage";
 
 beforeEach(() => {
-  // CoverImage always resolves localCover, even for a null URL.
   localCoverMock.mockReset().mockResolvedValue(null);
 });
 
 describe("CoverImage", () => {
-  it("shows an ellipsis placeholder when there is no URL", () => {
+  it("shows a static placeholder when there is no URL, without a cache round-trip", () => {
     render(<CoverImage url={null} alt="Cover art" />);
-    expect(screen.getByText("…")).toBeInTheDocument();
+    expect(screen.getByText("No cover art")).toBeInTheDocument();
+    expect(screen.queryByText("Cover art")).toBeNull();
     expect(document.querySelector("img")).toBeNull();
+    expect(localCoverMock).not.toHaveBeenCalled();
   });
 
   it("renders the resolved local cover", async () => {

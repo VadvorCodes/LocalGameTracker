@@ -1,6 +1,6 @@
 import type { LibraryEntry } from "../../types";
-import { STATUS_COLORS, STATUS_LABELS } from "../../types";
-import CoverImage from "../CoverImage";
+import CoverImage, { CoverScrim } from "../CoverImage";
+import StatusChip from "../StatusChip";
 import { Stars } from "../StarRating";
 import { scoreColor } from "../../lib/format";
 
@@ -10,7 +10,7 @@ export default function MatchCard({ entry }: { entry: LibraryEntry }) {
     <div className="card overflow-hidden w-44 shrink-0">
       <div className="relative aspect-[16/9] overflow-hidden">
         <CoverImage url={entry.coverUrl} alt={entry.name} className="w-full h-full object-cover" />
-        <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-surface-900 to-transparent" />
+        <CoverScrim className="h-10" />
       </div>
       <div className="p-2.5 space-y-1.5">
         <h4 className="text-xs font-medium text-slate-100 truncate" title={entry.name}>
@@ -24,11 +24,7 @@ export default function MatchCard({ entry }: { entry: LibraryEntry }) {
             </span>
           )}
         </div>
-        <span
-          className={`chip ${STATUS_COLORS[entry.status].bg} ${STATUS_COLORS[entry.status].text} ${STATUS_COLORS[entry.status].border} !text-[10px]`}
-        >
-          {STATUS_LABELS[entry.status]}
-        </span>
+        <StatusChip status={entry.status} className="!text-[10px]" />
       </div>
     </div>
   );

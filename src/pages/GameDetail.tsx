@@ -17,6 +17,7 @@ import PlaytimeDatesSection from "../components/gameDetail/PlaytimeDatesSection"
 import NotesSection from "../components/gameDetail/NotesSection";
 import ScoreSection from "../components/gameDetail/ScoreSection";
 import DivergenceCard from "../components/gameDetail/DivergenceCard";
+import ErrorNote from "../components/ErrorNote";
 import { formatDate } from "../lib/format";
 import { useApp } from "../store";
 
@@ -27,14 +28,23 @@ export default function GameDetail() {
   const profile = useApp((s) => s.profile);
 
   const [entry, setEntry] = useState<LibraryEntry | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Load failures and save failures are different states: a failed save must
+  // NOT tear down the page (that would silently discard the user's drafts).
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [notesDirty, setNotesDirty] = useState(false);
   const [catDraft, setCatDraft] = useState<CategoryScores>(emptyCategoryScores);
   const { begin, isCurrent } = useSequentialFetch();
+  // Separate guard for writes: two rapid updates must apply in the order they
+  // were issued, so a slow earlier response can't land last.
+  const { begin: beginWrite, isCurrent: isCurrentWrite } = useSequentialFetch();
 
   useEffect(() => {
-    if (!Number.isFinite(entryId)) return;
+    if (!Number.isFinite(entryId)) {
+      setLoadError(`Invalid entry id: “${id}”`);
+      return;
+    }
     const seq = begin();
     api
       .getLibraryEntry(entryId)
@@ -45,14 +55,14 @@ export default function GameDetail() {
         setCatDraft(categoryScoresOf(e));
       })
       .catch((err) => {
-        if (isCurrent(seq)) setError(String(err));
+        if (isCurrent(seq)) setLoadError(String(err));
       });
-  }, [entryId, begin, isCurrent]);
+  }, [entryId, id, begin, isCurrent]);
 
-  if (error) {
+  if (loadError) {
     return (
       <div className="p-8 text-center text-slate-400 mt-16">
-        Couldn’t load this entry: {error}
+        Couldn’t load this entry: {loadError}
         <div>
           <button className="btn-ghost mt-4" onClick={() => navigate("/library")}>
             Back to library
@@ -79,30 +89,34 @@ export default function GameDetail() {
   const dirty = catDirty || notesDirty;
 
   async function patch(p: Parameters<typeof api.updateLibraryEntry>[1]): Promise<boolean> {
+    const seq = beginWrite();
     try {
-      setEntry(await api.updateLibraryEntry(entryId, p));
+      const updated = await api.updateLibraryEntry(entryId, p);
+      if (isCurrentWrite(seq)) setEntry(updated);
       return true;
     } catch (e) {
-      setError(String(e));
+      setActionError(String(e));
       return false;
     }
   }
 
   async function setStars(v: number | null) {
+    const seq = beginWrite();
     try {
-      setEntry(await api.setStarRating(entryId, v));
+      const updated = await api.setStarRating(entryId, v);
+      if (isCurrentWrite(seq)) setEntry(updated);
     } catch (e) {
-      setError(String(e));
+      setActionError(String(e));
     }
   }
 
   async function saveAndLeave() {
     try {
-      if (catDirty) setEntry(await api.setCategoryScores(entryId, catDraft));
-      if (notesDirty) setEntry(await api.updateLibraryEntry(entryId, { notes }));
+      if (catDirty) await api.setCategoryScores(entryId, catDraft);
+      if (notesDirty) await api.updateLibraryEntry(entryId, { notes });
       navigate("/library");
     } catch (e) {
-      setError(String(e));
+      setActionError(String(e));
     }
   }
 
@@ -117,7 +131,7 @@ export default function GameDetail() {
       await api.removeLibraryEntry(entryId);
       navigate("/library");
     } catch (e) {
-      setError(String(e));
+      setActionError(String(e));
     }
   }
 
@@ -132,6 +146,9 @@ export default function GameDetail() {
         ← Back
       </button>
 
+      {/* A failed save/delete keeps the page (and the drafts) alive. */}
+      {actionError && <ErrorNote message={`That didn’t save: ${actionError}`} />}
+
       <div className="card overflow-hidden">
         <DetailHeader
           entry={entry}
@@ -140,7 +157,6 @@ export default function GameDetail() {
         />
 
         <div className="p-6 grid md:grid-cols-2 gap-8">
-          {/* left: status & journal */}
           <div className="space-y-6">
             <section>
               <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
@@ -169,7 +185,6 @@ export default function GameDetail() {
             </section>
           </div>
 
-          {/* right: ratings */}
           <div className="space-y-8">
             <section className="bg-surface-800/50 rounded-xl p-4">
               <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">

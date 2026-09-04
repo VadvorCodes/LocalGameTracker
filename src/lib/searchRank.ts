@@ -11,7 +11,7 @@ export type RankPreset = "balanced" | "bestMatch" | "popular" | "newest" | "cust
 
 export type WeightKey = keyof RankWeights;
 
-/** Clamp a percent (0..100) into [lo, hi] — not the 0..1 score `clamp` above. */
+/** Clamp a percent (0..100) into [lo, hi] — not the 0..1 score `clamp` below. */
 function clampPct(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }

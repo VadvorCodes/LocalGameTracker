@@ -10,8 +10,42 @@ import {
   themeVars,
 } from "../../lib/themes";
 import { useApp } from "../../store";
-import type { CustomThemeColours, UiSettings } from "../../types";
+import type { CustomThemeColours, ThemeId, UiSettings } from "../../types";
 import CustomThemeEditor from "../CustomThemeEditor";
+
+/** One swatch button in the theme grid (a preset or the Custom entry). */
+function ThemeButton({
+  active,
+  disabled,
+  onClick,
+  swatches,
+  label,
+}: {
+  active: boolean;
+  disabled: boolean;
+  onClick: () => void;
+  swatches: string[];
+  label: string;
+}) {
+  return (
+    <button
+      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-sm transition-colors ${
+        active
+          ? "border-accent-500/60 bg-accent-600/15 text-white"
+          : "border-surface-600 bg-surface-800 text-slate-300 hover:bg-surface-700"
+      }`}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <span className="flex rounded-full overflow-hidden border border-black/40 shrink-0">
+        {swatches.map((c, i) => (
+          <span key={i} className="w-3.5 h-3.5" style={{ backgroundColor: c }} />
+        ))}
+      </span>
+      {label}
+    </button>
+  );
+}
 
 /**
  * The Customisation tab: username and colour theme. Owns its own field state
@@ -68,7 +102,7 @@ export default function CustomisationTab() {
     applyTheme(current.theme, current.customTheme);
   }
 
-  function selectTheme(id: string) {
+  function selectTheme(id: ThemeId) {
     persistTheme(
       () => applyTheme(id), // instant feedback; store sync follows
       () => api.setTheme(id),
@@ -135,48 +169,25 @@ export default function CustomisationTab() {
         <h3 className="text-sm font-semibold text-slate-200 mb-1">Colour theme</h3>
         <p className="text-xs text-slate-500 mb-3">Applies instantly and is saved automatically.</p>
         <div className="grid grid-cols-2 gap-2">
-          {THEMES.map((t) => {
-            const active = t.id === settings.theme;
-            return (
-              <button
-                key={t.id}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-sm transition-colors ${
-                  active
-                    ? "border-accent-500/60 bg-accent-600/15 text-white"
-                    : "border-surface-600 bg-surface-800 text-slate-300 hover:bg-surface-700"
-                }`}
-                disabled={theme.pending}
-                onClick={() => selectTheme(t.id)}
-              >
-                <span className="flex rounded-full overflow-hidden border border-black/40 shrink-0">
-                  {themeSwatches(t).map((c, i) => (
-                    <span key={i} className="w-3.5 h-3.5" style={{ backgroundColor: c }} />
-                  ))}
-                </span>
-                {t.name}
-              </button>
-            );
-          })}
-          <button
-            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-sm transition-colors ${
-              isCustomTheme
-                ? "border-accent-500/60 bg-accent-600/15 text-white"
-                : "border-surface-600 bg-surface-800 text-slate-300 hover:bg-surface-700"
-            }`}
+          {THEMES.map((t) => (
+            <ThemeButton
+              key={t.id}
+              active={t.id === settings.theme}
+              disabled={theme.pending}
+              onClick={() => selectTheme(t.id)}
+              swatches={themeSwatches(t)}
+              label={t.name}
+            />
+          ))}
+          <ThemeButton
+            active={isCustomTheme}
             disabled={theme.pending}
             onClick={selectCustomTheme}
-          >
-            <span className="flex rounded-full overflow-hidden border border-black/40 shrink-0">
-              {["--surface-900", "--accent-400", "--accent-500", "--accent-600"].map((n) => (
-                <span
-                  key={n}
-                  className="w-3.5 h-3.5"
-                  style={{ backgroundColor: `rgb(${customVars[n as keyof typeof customVars]})` }}
-                />
-              ))}
-            </span>
-            Custom
-          </button>
+            swatches={["--surface-900", "--accent-400", "--accent-500", "--accent-600"].map(
+              (n) => `rgb(${customVars[n as keyof typeof customVars]})`,
+            )}
+            label="Custom"
+          />
         </div>
 
         {isCustomTheme && (

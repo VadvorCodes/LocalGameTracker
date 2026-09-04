@@ -22,7 +22,6 @@ function appReady() {
 }
 
 beforeEach(() => {
-  window.localStorage.clear();
   document.documentElement.style.cssText = "";
   at("/");
   const profile = makeProfile();
@@ -38,6 +37,7 @@ beforeEach(() => {
   useApp.setState({
     profile: null,
     profileLoading: true,
+    profileError: null,
     hasApiKey: true,
     settings: defaultSettings(),
   });
@@ -119,8 +119,21 @@ describe("App — routing", () => {
     at("/dashboard");
     render(<App />);
     await screen.findByText("My gaming dashboard");
-    expect(screen.getByText("Dashboard")).toHaveClass("bg-accent-600/20");
-    expect(screen.getByText("Library")).not.toHaveClass("bg-accent-600/20");
+    expect(screen.getByText("Dashboard")).toHaveClass("chip-active");
+    expect(screen.getByText("Library")).not.toHaveClass("chip-active");
+  });
+
+  it("offers a retry instead of Onboarding when the profile read fails", async () => {
+    apiMock.getProfile.mockRejectedValueOnce(new Error("backend busy"));
+    render(<App />);
+    expect(await screen.findByText(/Couldn’t reach your library/)).toHaveTextContent(
+      "backend busy",
+    );
+    expect(screen.queryByText("Welcome to GameTracker")).toBeNull();
+
+    apiMock.getProfile.mockResolvedValueOnce(makeProfile());
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await appReady()).toBeInTheDocument();
   });
 
   it("navigates between sections from the sidebar", async () => {
@@ -128,7 +141,7 @@ describe("App — routing", () => {
     await appReady();
     fireEvent.click(screen.getByText("Search"));
     expect(await screen.findByText("Find games")).toBeInTheDocument();
-    expect(screen.getByText("Search")).toHaveClass("bg-accent-600/20");
+    expect(screen.getByText("Search")).toHaveClass("chip-active");
   });
 });
 

@@ -14,6 +14,7 @@ beforeEach(() => {
   useApp.setState({
     profile: null,
     profileLoading: true,
+    profileError: null,
     hasApiKey: true,
     settings: defaultSettings(),
   });
@@ -26,6 +27,7 @@ describe("loadProfile", () => {
     await useApp.getState().loadProfile();
     expect(useApp.getState().profile).toEqual(profile);
     expect(useApp.getState().profileLoading).toBe(false);
+    expect(useApp.getState().profileError).toBeNull();
   });
 
   it("keeps profile null (onboarding path) when the backend has none", async () => {
@@ -33,12 +35,16 @@ describe("loadProfile", () => {
     await useApp.getState().loadProfile();
     expect(useApp.getState().profile).toBeNull();
     expect(useApp.getState().profileLoading).toBe(false);
+    expect(useApp.getState().profileError).toBeNull();
   });
 
-  it("treats an error as 'no profile' and clears the loading flag", async () => {
+  it("reports a failed read as an error instead of 'no profile'", async () => {
+    // A busy backend must not route an existing user into Onboarding.
+    useApp.setState({ profile: makeProfile({ username: "existing" }) });
     apiMock.getProfile.mockRejectedValueOnce(new Error("boom"));
     await useApp.getState().loadProfile();
-    expect(useApp.getState().profile).toBeNull();
+    expect(useApp.getState().profileError).toBe("Error: boom");
+    expect(useApp.getState().profile).not.toBeNull();
     expect(useApp.getState().profileLoading).toBe(false);
   });
 });
@@ -54,7 +60,13 @@ describe("loadApiKeyStatus", () => {
     expect(useApp.getState().hasApiKey).toBe(true);
   });
 
-  it("swallows errors and keeps the previous flag", async () => {
+  it("starts false (the honest unknown) and keeps the last known flag on error", async () => {
+    useApp.setState({ hasApiKey: false });
+    apiMock.getApiKey.mockRejectedValueOnce(new Error("boom"));
+    await useApp.getState().loadApiKeyStatus();
+    expect(useApp.getState().hasApiKey).toBe(false);
+
+    useApp.setState({ hasApiKey: true });
     apiMock.getApiKey.mockRejectedValueOnce(new Error("boom"));
     await useApp.getState().loadApiKeyStatus();
     expect(useApp.getState().hasApiKey).toBe(true);

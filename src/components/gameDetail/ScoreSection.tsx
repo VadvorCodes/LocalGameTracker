@@ -38,17 +38,14 @@ export default function ScoreSection({
       <div className="space-y-4">
         <CategoryScoreEditor scores={draft} onChange={onDraftChange} weights={weights} />
         <div className="flex flex-wrap gap-2">
-          {CATEGORIES.map(({ key }) => (
+          {CATEGORIES.map(({ key, label }) => (
             <button
               key={key}
-              className={`chip ${
-                draft[key] != null
-                  ? "bg-accent-600/20 text-accent-400 border-accent-500/40"
-                  : "bg-surface-800 text-slate-500 border-surface-600"
-              }`}
+              className={`chip ${draft[key] != null ? "chip-active" : "chip-idle"}`}
+              title={draft[key] != null ? `Clear the ${label} score` : undefined}
               onClick={() => onDraftChange({ ...draft, [key]: null })}
             >
-              {draft[key] != null ? `clear ${key}` : `${key}: unset`}
+              {draft[key] != null ? `Clear ${label}` : `${label}: not set`}
             </button>
           ))}
         </div>

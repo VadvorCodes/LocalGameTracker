@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { LibraryEntry } from "../../types";
 import CoverImage from "../CoverImage";
 import { HeartIcon, TrashIcon } from "../icons";
-import { formatDate, metaLine } from "../../lib/format";
+import { formatDate, metaLine, GENRE_PREVIEW_COUNT } from "../../lib/format";
 
 /**
  * Cover band of the detail page: artwork with a fade, the game name, its
@@ -31,7 +31,7 @@ export default function DetailHeader({
             {metaLine(
               entry.developer,
               entry.releaseDate ? formatDate(entry.releaseDate) : null,
-              ...entry.genres.slice(0, 3),
+              ...entry.genres.slice(0, GENRE_PREVIEW_COUNT),
             )}
           </p>
         </div>

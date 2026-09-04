@@ -51,12 +51,9 @@ export const GearIcon = (props: IconProps) => (
   </svg>
 );
 
-export const StarIcon = ({
-  filled,
-  className = "w-4 h-4",
-  ...props
-}: IconProps & { filled: boolean }) => (
-  <svg {...base} {...props} fill={filled ? "currentColor" : "none"} className={className}>
+/** Solid star glyph (read-only displays and the picker all render it filled). */
+export const StarIcon = ({ className = "w-4 h-4", ...props }: IconProps) => (
+  <svg {...base} {...props} fill="currentColor" className={className}>
     <path d="m12 2 3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01L12 2z" />
   </svg>
 );
@@ -83,9 +80,25 @@ export const RefreshIcon = (props: IconProps) => (
   </svg>
 );
 
-export const ClockIcon = (props: IconProps) => (
+/** Arcade joystick, for library empty states. */
+export const JoystickIcon = (props: IconProps) => (
   <svg {...base} {...props}>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 7v5l3 2" />
+    <circle cx="12" cy="6" r="3" />
+    <path d="M12 9v7" />
+    <rect x="4" y="16" width="16" height="4" rx="1.5" />
+  </svg>
+);
+
+/** Party popper, for cycle-complete celebrations. */
+export const PartyIcon = (props: IconProps) => (
+  <svg {...base} {...props}>
+    <path d="M5.8 11.3 2 22l10.7-3.8" />
+    <path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z" />
+    <path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0" />
+    <path d="M14 10l.21-1.06a1.8 1.8 0 0 1 1.76-1.44h.38c.88 0 1.55-.77 1.45-1.63" />
+    <path d="m4 3h.01" />
+    <path d="M15 2h.01" />
+    <path d="M22 8h.01" />
+    <path d="M22 20h.01" />
   </svg>
 );

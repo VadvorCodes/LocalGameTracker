@@ -30,7 +30,10 @@ export default function MixBar({
   const cuts = [b1, b2];
   const widths = [b1, b2 - b1, 100 - b2];
 
-  // Re-registered every render so the handlers always see the latest weights.
+  // Handlers depend on the latest weights/drag target, so they re-register
+  // only when those change. pointercancel (an OS-cancelled touch) must clear
+  // the drag like pointerup, or `dragging` sticks and stray moves keep
+  // reallocating weights.
   useEffect(() => {
     function onPointerMove(e: PointerEvent) {
       if (dragging === null) return;
@@ -38,16 +41,18 @@ export default function MixBar({
       if (!rect || rect.width === 0) return;
       onChange(setDivider(weights, dragging, ((e.clientX - rect.left) / rect.width) * 100));
     }
-    function onPointerUp() {
+    function onPointerEnd() {
       setDragging(null);
     }
     window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointerup", onPointerEnd);
+    window.addEventListener("pointercancel", onPointerEnd);
     return () => {
       window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointerup", onPointerEnd);
+      window.removeEventListener("pointercancel", onPointerEnd);
     };
-  });
+  }, [dragging, weights, onChange]);
 
   function onKeyDown(divider: 0 | 1) {
     return (e: React.KeyboardEvent) => {

@@ -9,16 +9,15 @@ export default function StatusChips({
   onSelect: (status: PlayStatus) => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Play status">
       {STATUSES.map((s) => {
         const c = STATUS_COLORS[s];
         return (
           <button
             key={s}
+            aria-pressed={status === s}
             className={`chip py-1.5 px-3 ${
-              status === s
-                ? `${c.bg} ${c.text} ${c.border}`
-                : "bg-surface-800 text-slate-400 border-surface-600"
+              status === s ? `${c.bg} ${c.text} ${c.border}` : "chip-idle"
             }`}
             onClick={() => onSelect(s)}
           >

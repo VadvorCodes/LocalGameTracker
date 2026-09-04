@@ -21,7 +21,6 @@ import {
 
 function Layout({ children }: { children: React.ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const profile = useApp((s) => s.profile);
   const location = useLocation();
 
   const nav = [
@@ -49,7 +48,7 @@ function Layout({ children }: { children: React.ReactNode }) {
                 to={n.to}
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   active
-                    ? "bg-accent-600/20 text-accent-400"
+                    ? "chip-active"
                     : "text-slate-400 hover:bg-surface-800 hover:text-slate-200"
                 }`}
               >
@@ -67,7 +66,7 @@ function Layout({ children }: { children: React.ReactNode }) {
             <GearIcon />
             Settings
           </button>
-          {profile && <SidebarUsername />}
+          <SidebarUsername />
         </div>
       </aside>
       <main className="flex-1 overflow-y-auto">{children}</main>
@@ -81,6 +80,7 @@ export default function App() {
   // (e.g. hasApiKey, or extendedSorting for the theme effect).
   const profile = useApp((s) => s.profile);
   const profileLoading = useApp((s) => s.profileLoading);
+  const profileError = useApp((s) => s.profileError);
   const loadProfile = useApp((s) => s.loadProfile);
   const loadApiKeyStatus = useApp((s) => s.loadApiKeyStatus);
   const loadSettings = useApp((s) => s.loadSettings);
@@ -101,6 +101,18 @@ export default function App() {
     return (
       <div className="h-full flex items-center justify-center text-slate-500">
         Loading GameTracker…
+      </div>
+    );
+  }
+  if (profileError) {
+    // The profile read failed (busy backend, DB error) — offer a retry instead
+    // of the Onboarding flow, which would try to create a duplicate profile.
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-4 text-slate-400">
+        <p>Couldn’t reach your library: {profileError}</p>
+        <button className="btn-primary" onClick={() => void loadProfile()}>
+          Retry
+        </button>
       </div>
     );
   }

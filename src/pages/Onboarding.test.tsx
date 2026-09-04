@@ -64,6 +64,17 @@ describe("Onboarding", () => {
     await vi.waitFor(() => expect(useApp.getState().profile).not.toBeNull());
   });
 
+  it("ignores a second Enter while a create is in flight", () => {
+    apiMock.createProfile.mockReturnValueOnce(new Promise(() => {})); // never settles
+    render(<Onboarding />);
+    const input = screen.getByPlaceholderText("Choose a local username");
+    fireEvent.change(input, { target: { value: "carol" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(apiMock.createProfile).toHaveBeenCalledTimes(1);
+  });
+
   it("shows a Creating… label and locks the form while creating", () => {
     apiMock.createProfile.mockReturnValueOnce(new Promise(() => {}));
     render(<Onboarding />);

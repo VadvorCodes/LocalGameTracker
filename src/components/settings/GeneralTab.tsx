@@ -106,11 +106,8 @@ export default function GeneralTab() {
           (Gameplay, Story, Music, Technical) to the Library sort menu.
         </p>
         <button
-          className={`chip py-1.5 ${
-            extendedSorting
-              ? "bg-accent-600/20 text-accent-400 border-accent-500/40"
-              : "bg-surface-800 text-slate-400 border-surface-600"
-          }`}
+          aria-pressed={extendedSorting}
+          className={`chip py-1.5 ${extendedSorting ? "chip-active" : "chip-idle"}`}
           disabled={extendedSort.pending}
           onClick={() => toggleExtendedSorting(!extendedSorting)}
         >

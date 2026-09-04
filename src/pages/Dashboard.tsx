@@ -14,9 +14,17 @@ import {
 } from "recharts";
 import { api } from "../api";
 import type { Analytics, MiniEntry, RatingMode } from "../types";
-import { STATUSES, STATUS_COLORS, STATUS_LABELS } from "../types";
-import ChartFrame, { useChartPalette } from "../components/dashboard/ChartFrame";
+import { CATEGORIES, STATUSES, STATUS_COLORS, STATUS_LABELS } from "../types";
+import ChartFrame, {
+  AXIS_TICK_COLOR,
+  CHART_HEIGHT,
+  SERIES_CAUTION,
+  SERIES_NEGATIVE,
+  SERIES_POSITIVE,
+  useChartPalette,
+} from "../components/dashboard/ChartFrame";
 import CoverImage from "../components/CoverImage";
+import ErrorNote from "../components/ErrorNote";
 import { Stars } from "../components/StarRating";
 import { formatPlaytime, scoreColor } from "../lib/format";
 import { useSequentialFetch } from "../hooks/useSequentialFetch";
@@ -52,6 +60,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     void loadAnalytics();
+    // `profile` is deliberate: saving new weights (GeneralTab) replaces the
+    // profile, which recomputes every analytics number — so reload then too.
   }, [loadAnalytics, profile]);
 
   if (!analytics) {
@@ -59,7 +69,7 @@ export default function Dashboard() {
       return (
         <div className="p-8 max-w-6xl mx-auto space-y-6">
           <h1 className="text-xl font-semibold text-white">My gaming dashboard</h1>
-          <ErrorBanner message={error} onRetry={loadAnalytics} />
+          <ErrorNote message={`Could not load analytics: ${error}`} onRetry={loadAnalytics} />
         </div>
       );
     }
@@ -76,6 +86,7 @@ export default function Dashboard() {
   }
 
   const hasRatings = analytics.avgOverall != null || analytics.avgStars != null;
+  const shift = analytics.firstVsRecent;
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-8">
@@ -84,9 +95,10 @@ export default function Dashboard() {
       </div>
 
       {/* a background refresh (rating-mode switch) failed; keep the stale data visible */}
-      {error && <ErrorBanner message={error} onRetry={loadAnalytics} />}
+      {error && (
+        <ErrorNote message={`Could not load analytics: ${error}`} onRetry={loadAnalytics} />
+      )}
 
-      {/* headline stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Stat label="Games tracked" value={String(analytics.totalGames)} />
         <Stat label="Favourites" value={String(analytics.favourites)} />
@@ -98,7 +110,6 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* status + star distribution */}
       <div className="grid md:grid-cols-2 gap-4">
         <Panel title="Play status">
           <div className="space-y-2">
@@ -128,7 +139,9 @@ export default function Dashboard() {
                 {analytics.starDistribution.map((d) => (
                   <Cell
                     key={d.x}
-                    fill={d.x >= 3.5 ? "#34d399" : d.x >= 2 ? "#fbbf24" : "#fb7185"}
+                    fill={
+                      d.x >= 3.5 ? SERIES_POSITIVE : d.x >= 2 ? SERIES_CAUTION : SERIES_NEGATIVE
+                    }
                   />
                 ))}
               </Bar>
@@ -148,60 +161,57 @@ export default function Dashboard() {
         </Panel>
       )}
 
-      {/* category radar */}
-      {hasRatings &&
-        (analytics.categoryAverages.gameplay != null ||
-          analytics.categoryAverages.story != null) && (
-          <div className="grid md:grid-cols-2 gap-4">
-            <Panel title="Category Profile">
-              <ResponsiveContainer width="100%" height={220}>
-                <RadarChart
-                  data={[
-                    { cat: "Gameplay", v: analytics.categoryAverages.gameplay ?? 0 },
-                    { cat: "Story", v: analytics.categoryAverages.story ?? 0 },
-                    { cat: "Music", v: analytics.categoryAverages.music ?? 0 },
-                    { cat: "Technical", v: analytics.categoryAverages.technical ?? 0 },
-                  ]}
-                  outerRadius="70%"
-                >
-                  <PolarGrid stroke={palette.polarGrid} />
-                  <PolarAngleAxis dataKey="cat" tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                  <PolarRadiusAxis domain={[0, 100]} tick={{ fill: "#475569", fontSize: 10 }} />
-                  <Radar
-                    dataKey="v"
-                    name="Average"
-                    stroke={palette.accent}
-                    fill={palette.accent}
-                    fillOpacity={0.35}
-                  />
-                  <Tooltip
-                    contentStyle={palette.tooltipStyle}
-                    formatter={(value) => Number(value).toFixed(1)}
-                  />
-                </RadarChart>
-              </ResponsiveContainer>
-            </Panel>
+      {/* The radar needs at least one scored category — of any of the four. */}
+      {hasRatings && CATEGORIES.some(({ key }) => analytics.categoryAverages[key] != null) && (
+        <div className="grid md:grid-cols-2 gap-4">
+          <Panel title="Category Profile">
+            <ResponsiveContainer width="100%" height={220}>
+              <RadarChart
+                data={[
+                  { cat: "Gameplay", v: analytics.categoryAverages.gameplay ?? 0 },
+                  { cat: "Story", v: analytics.categoryAverages.story ?? 0 },
+                  { cat: "Music", v: analytics.categoryAverages.music ?? 0 },
+                  { cat: "Technical", v: analytics.categoryAverages.technical ?? 0 },
+                ]}
+                outerRadius="70%"
+              >
+                <PolarGrid stroke={palette.polarGrid} />
+                <PolarAngleAxis dataKey="cat" tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} />
+                <PolarRadiusAxis domain={[0, 100]} tick={{ fill: AXIS_TICK_COLOR, fontSize: 10 }} />
+                <Radar
+                  dataKey="v"
+                  name="Average"
+                  stroke={palette.accent}
+                  fill={palette.accent}
+                  fillOpacity={0.35}
+                />
+                <Tooltip
+                  contentStyle={palette.tooltipStyle}
+                  formatter={(value) => Number(value).toFixed(1)}
+                />
+              </RadarChart>
+            </ResponsiveContainer>
+          </Panel>
 
-            <Panel title="Detailed score distribution">
-              {analytics.scoreDistribution.some((d) => d.y > 0) ? (
-                <ChartFrame
-                  kind="bar"
-                  data={analytics.scoreDistribution}
-                  xKey="x"
-                  xTickFontSize={10}
-                  xInterval={1}
-                  yWholeNumbers
-                >
-                  <Bar dataKey="y" name="Games" fill={palette.accent} radius={[4, 4, 0, 0]} />
-                </ChartFrame>
-              ) : (
-                <Empty text="No detailed scores yet." />
-              )}
-            </Panel>
-          </div>
-        )}
+          <Panel title="Detailed score distribution">
+            {analytics.scoreDistribution.some((d) => d.y > 0) ? (
+              <ChartFrame
+                kind="bar"
+                data={analytics.scoreDistribution}
+                xKey="x"
+                xTickFontSize={10}
+                xInterval={1}
+                yWholeNumbers
+              >
+                <Bar dataKey="y" name="Games" fill={palette.accent} radius={[4, 4, 0, 0]} />
+              </ChartFrame>
+            ) : (
+              <Empty text="No detailed scores yet." />
+            )}
+          </Panel>
+        </div>
+      )}
 
-      {/* trends */}
       {analytics.ratingTrend.length >= 2 && (
         <div className="grid md:grid-cols-2 gap-4">
           <Panel title="Rating trend — how your standards move">
@@ -220,7 +230,13 @@ export default function Dashboard() {
                 stroke={palette.accent}
                 dot
               />
-              <Line type="monotone" dataKey="avgStars" name="Stars (×20)" stroke="#fbbf24" dot />
+              <Line
+                type="monotone"
+                dataKey="avgStars"
+                name="Stars (×20)"
+                stroke={SERIES_CAUTION}
+                dot
+              />
             </ChartFrame>
           </Panel>
           <Panel title="Category trends — how your taste evolves">
@@ -233,16 +249,15 @@ export default function Dashboard() {
               legend
             >
               <Line type="monotone" dataKey="gameplay" stroke={palette.accent} dot={false} />
-              <Line type="monotone" dataKey="story" stroke="#34d399" dot={false} />
-              <Line type="monotone" dataKey="music" stroke="#fbbf24" dot={false} />
-              <Line type="monotone" dataKey="technical" stroke="#fb7185" dot={false} />
+              <Line type="monotone" dataKey="story" stroke={SERIES_POSITIVE} dot={false} />
+              <Line type="monotone" dataKey="music" stroke={SERIES_CAUTION} dot={false} />
+              <Line type="monotone" dataKey="technical" stroke={SERIES_NEGATIVE} dot={false} />
             </ChartFrame>
           </Panel>
         </div>
       )}
 
-      {/* first vs recent shift */}
-      {analytics.firstVsRecent && (
+      {shift && (
         <Panel title="Then vs Now">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {(
@@ -253,8 +268,8 @@ export default function Dashboard() {
                 ["Technical", "technical"],
               ] as const
             ).map(([label, key]) => {
-              const first = analytics.firstVsRecent!.firstQuartile[key];
-              const recent = analytics.firstVsRecent!.recentQuartile[key];
+              const first = shift.firstQuartile[key];
+              const recent = shift.recentQuartile[key];
               const delta = first != null && recent != null ? recent - first : null;
               return (
                 <div key={key} className="bg-surface-800/50 rounded-xl p-4 text-center">
@@ -284,7 +299,6 @@ export default function Dashboard() {
         </Panel>
       )}
 
-      {/* genre breakdown + recently rated */}
       {(analytics.genreBreakdown.length > 0 || analytics.recentlyRated.length > 0) && (
         <div className="grid md:grid-cols-2 gap-4">
           <Panel title="Genres you play (top 10)">
@@ -297,7 +311,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* extremes + divergence */}
       {(analytics.highestRated.length > 0 || analytics.lowestRated.length > 0) && (
         <div className="grid md:grid-cols-2 gap-4">
           <Panel
@@ -307,11 +320,8 @@ export default function Dashboard() {
                 {RATING_MODES.map((m) => (
                   <button
                     key={m.key}
-                    className={`chip ${
-                      ratingMode === m.key
-                        ? "bg-accent-600/20 text-accent-400 border-accent-500/40"
-                        : "bg-surface-800 text-slate-500 border-surface-600 hover:text-slate-300"
-                    }`}
+                    aria-pressed={ratingMode === m.key}
+                    className={`chip ${ratingMode === m.key ? "chip-active" : "chip-idle hover:text-slate-300"}`}
                     title={`Rank by ${m.label.toLowerCase()} rating`}
                     onClick={() => setRatingMode(m.key)}
                   >
@@ -374,24 +384,16 @@ export default function Dashboard() {
   );
 }
 
-/** Chip-style load-failure banner (matches Library/Search) with a retry button. */
-function ErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div className="chip bg-rose-500/10 text-rose-300 border-rose-500/30 py-1.5 flex items-center justify-between gap-3">
-      <span>Could not load analytics: {message}</span>
-      <button
-        className="chip bg-surface-800 text-slate-300 border-surface-600 hover:text-white"
-        onClick={onRetry}
-      >
-        Retry
-      </button>
-    </div>
-  );
-}
-
 function Empty({ text }: { text: string }) {
+  // Same height as ChartFrame's plot, so a chart slot and its empty state swap
+  // without the panel jumping.
   return (
-    <div className="h-[220px] flex items-center justify-center text-sm text-slate-600">{text}</div>
+    <div
+      className="flex items-center justify-center text-sm text-slate-600"
+      style={{ height: CHART_HEIGHT }}
+    >
+      {text}
+    </div>
   );
 }
 

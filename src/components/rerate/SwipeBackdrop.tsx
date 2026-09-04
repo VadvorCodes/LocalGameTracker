@@ -3,9 +3,14 @@
  * full height of each side (so it reads at any window size) and sits behind
  * the tint, out of the card's travel path at the sides.
  */
+
+/** Drag distance (px) at which a side's tint saturates — deliberately beyond
+ * SwipeCard's COMMIT_THRESHOLD (110), so the tint peaks before a swipe can commit. */
+const SATURATE_PX = 160;
+
 export default function SwipeBackdrop({ dragX }: { dragX: number }) {
-  const left = Math.min(1, Math.max(0, -dragX) / 160);
-  const right = Math.min(1, Math.max(0, dragX) / 160);
+  const left = Math.min(1, Math.max(0, -dragX) / SATURATE_PX);
+  const right = Math.min(1, Math.max(0, dragX) / SATURATE_PX);
   return (
     <div className="absolute inset-0 pointer-events-none flex overflow-hidden">
       <div

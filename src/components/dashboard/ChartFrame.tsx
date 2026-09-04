@@ -12,11 +12,22 @@ import {
 import { cssColor, themeVars } from "../../lib/themes";
 import { useApp } from "../../store";
 
-/** Slate tick colour shared by every dashboard axis. */
+/** Slate tick colour shared by every dashboard axis (cartesian and radar). */
 export const AXIS_TICK_COLOR = "#64748b";
 
-/** Standard tick styling for a cartesian axis. */
-export const axisTick = (fontSize: number) => ({ fill: AXIS_TICK_COLOR, fontSize });
+const axisTick = (fontSize: number) => ({ fill: AXIS_TICK_COLOR, fontSize });
+
+/**
+ * Fixed good/mid/bad series colours, deliberately NOT derived from the theme:
+ * the accent can be any colour the user picks (e.g. green) and must not blend
+ * into a sentiment the chart is trying to show.
+ */
+export const SERIES_POSITIVE = "#34d399";
+export const SERIES_CAUTION = "#fbbf24";
+export const SERIES_NEGATIVE = "#fb7185";
+
+/** Pixel height of the plot area; Empty states mirror it so panels don't jump. */
+export const CHART_HEIGHT = 220;
 
 const Y_AXIS_TICK = axisTick(11);
 const LEGEND_STYLE = { fontSize: 11 };
@@ -89,7 +100,7 @@ export function ChartFrame({
   yDomain,
   grid = false,
   legend = false,
-  height = 220,
+  height = CHART_HEIGHT,
 }: ChartFrameProps) {
   const palette = useChartPalette();
   const Chart = kind === "line" ? LineChart : BarChart;
@@ -97,16 +108,8 @@ export function ChartFrame({
     <ResponsiveContainer width="100%" height={height}>
       <Chart data={data}>
         {grid && <CartesianGrid stroke={palette.grid} />}
-        <XAxis
-          dataKey={xKey}
-          tick={axisTick(xTickFontSize)}
-          {...(xInterval !== undefined ? { interval: xInterval } : {})}
-        />
-        <YAxis
-          {...(yWholeNumbers ? { allowDecimals: false } : {})}
-          {...(yDomain ? { domain: yDomain } : {})}
-          tick={Y_AXIS_TICK}
-        />
+        <XAxis dataKey={xKey} tick={axisTick(xTickFontSize)} interval={xInterval} />
+        <YAxis allowDecimals={!yWholeNumbers} domain={yDomain} tick={Y_AXIS_TICK} />
         <Tooltip contentStyle={palette.tooltipStyle} />
         {legend && <Legend wrapperStyle={LEGEND_STYLE} />}
         {children}
